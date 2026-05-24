@@ -2,7 +2,7 @@
 
 The input data file `pww_sdm_input_data.xlsx` is archived at:
 
-**Zenodo: [DOI — add before publication]**
+**Zenodo: https://doi.org/10.5281/zenodo.20369405**
 
 Download it and place it in this `data/` folder before running the optimizer.
 
