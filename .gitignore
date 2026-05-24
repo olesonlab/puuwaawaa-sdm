@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.env
+
+# Data (add to repo separately or via Zenodo)
+data/*.xlsx
+data/*.csv
+data/*.xls
+
+# Results (generated outputs)
+results/*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
