@@ -10,8 +10,15 @@ data/*.xlsx
 data/*.csv
 data/*.xls
 
-# Results (generated outputs)
+# Results (generated outputs). The runs behind the paper's figures and
+# tables are committed explicitly so the figures reproduce without re-solving.
 results/*.csv
+!results/sdm_results_summary.csv
+!results/sdm_results_paddock_detail.csv
+!results/sdm_scenario_definitions.csv
+!results/table1.csv
+!results/table2.csv
+!results/table3.csv
 
 # OS
 .DS_Store

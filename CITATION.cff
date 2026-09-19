@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both the software and the paper."
+title: "puuwaawaa-sdm: structured decision making optimizer for Puʻuwaʻawaʻa Forest Reserve"
+abstract: >-
+  Integer-programming optimizer, figure and table scripts, and sensitivity
+  and fire-feedback analyses for a structured decision making study of 11
+  management alternatives across 22 paddocks at Puʻuwaʻawaʻa Forest Reserve,
+  Hawaiʻi, under seven stakeholder weighting scenarios and five budget levels.
+type: software
+license: MIT
+repository-code: "https://github.com/olesonlab/puuwaawaa-sdm"
+authors:
+  - family-names: Oleson
+    given-names: Kirsten L. L.
+    affiliation: "University of Hawaiʻi at Mānoa"
+    email: koleson@hawaii.edu
+  - family-names: Trauernicht
+    given-names: Clay
+    affiliation: "University of Hawaiʻi at Mānoa"
+  - family-names: Lonsdorf
+    given-names: Eric
+    affiliation: "Emory University"
+  - family-names: Parsons
+    given-names: Elliott W.
+keywords:
+  - structured decision making
+  - multi-criteria decision analysis
+  - conservation planning
+  - integer programming
+  - wildfire
+  - Hawaiʻi
+references:
+  - type: data
+    title: "Puʻuwaʻawaʻa Forest Reserve SDM Input Data"
+    doi: "10.5281/zenodo.20369405"
+    authors:
+      - family-names: Oleson
+        given-names: Kirsten L. L.
+      - family-names: Lonsdorf
+        given-names: Eric
+      - family-names: Trauernicht
+        given-names: Clay
+      - family-names: Parsons
+        given-names: Elliott W.

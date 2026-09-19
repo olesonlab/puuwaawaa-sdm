@@ -4,7 +4,7 @@ The input data file `pww_sdm_input_data.xlsx` is archived at:
 
 **Zenodo: https://doi.org/10.5281/zenodo.20369405**
 
-Download it and place it in this `data/` folder before running the optimizer.
+A byte-identical copy is committed here, so no download is needed.
 
 ## Contents of pww_sdm_input_data.xlsx
 
@@ -14,7 +14,12 @@ Download it and place it in this `data/` folder before running the optimizer.
 | `native_rareplants` | Native forest cover (%) and T&E plant counts per paddock. Data begin at row 5 (pandas index 4) to preserve row offsets expected by the optimizer. |
 | `People` | Expert-elicited community preference base scores for recreationists (cols C–M), hunters (cols P–Z), and ranchers (cols AC–AM) per alternative. Spacer columns at N–O and AA–AB preserve column offsets expected by the optimizer. |
 | `flammability` | Baseline Q3 fire probability per paddock (col B) and post-management fire probability per paddock per alternative (cols F–P). Spacer columns at D–E preserve column offsets expected by the optimizer. Data begin at row 5 (pandas index 4). |
-| `alternatives_reference` | Reference table describing each of the 11 management alternatives. Not read by the optimizer. |
+| `alternatives` | Reference table describing each of the 11 management alternatives. Not read by the optimizer. |
+
+The workbook also carries four working sheets kept from the elicitation and
+cleaning process: `cleaned`, `pivot`, `alt_trans`, and `raw from Clay`. None of
+them is read by any script here. They are retained so the committed file matches
+the archived Zenodo record exactly.
 
 ## Notes on spacer columns and row offsets
 
