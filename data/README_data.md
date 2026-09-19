@@ -21,6 +21,24 @@ cleaning process: `cleaned`, `pivot`, `alt_trans`, and `raw from Clay`. None of
 them is read by any script here. They are retained so the committed file matches
 the archived Zenodo record exactly.
 
+## The Alt_2 cost column and the roadside fuelbreak
+
+The `Alt_2` column of `paddock_data` is not a per-paddock cost. It is the single
+cost of the roadside fuelbreak distributed across paddocks by area at a flat
+0.00345277 per m2, so it is exactly proportional to paddock area. Its column
+total, 137,677.06, is labelled in the sheet itself: the cell beneath it reads
+"note: single cost for roadside fuel break", and 39,874,401 m2 of reserve times
+the per-m2 rate reproduces it.
+
+The optimizer therefore ignores that column and charges `ROADSIDE_COST =
+137677.06` once when the fuelbreak is built.
+
+Do not use 80,728.08 for this. That figure sits at `paddock_data[44,4]`, in the
+separate "Shared borders between paddocks" table, and is the fence cost for the
+single border between paddocks 1 and 2 (1090.92 m). It is the first of 46 border
+rows whose fence column totals 3,576,698.26. Earlier versions of the model used
+it as the shared firebreak cost, which undercharged the fuelbreak by 56,948.98.
+
 ## Notes on spacer columns and row offsets
 
 The optimizer (`src/pww_sdm_optimizer.py`) reads data using hardcoded `iloc` indices. The spacer columns and extra header rows in `pww_sdm_input_data.xlsx` are intentional: they preserve the exact column and row offsets the optimizer expects. Do not remove them.

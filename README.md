@@ -14,18 +14,26 @@ A companion paper on normalization methods is at
 
 ## Overview
 
-An integer program evaluates 11 management alternatives across 22 paddocks at
+An integer program evaluates management alternatives across 22 paddocks at
 Puʻuwaʻawaʻa Forest Reserve under seven stakeholder weighting scenarios and five
 budget levels ($5M to $60M). Scores are normalized within each paddock, which
 keeps spatial priority separate from action effectiveness. The companion paper
 explains why that choice matters.
 
+The roadside fuelbreak is a single landscape decision rather than a paddock-level
+alternative. It is built once for the reserve or not at all, charged once at
+$137,677.06, and when built it lowers fire probability in every paddock. Paddocks
+choose among the other ten alternatives. Every scenario and budget is solved
+twice, with and without it, and the better solution is kept. It is built at $5M
+in every scenario and at $10M in six of seven, and not at $20M and above.
+
 Conservation outcomes are budget-constrained across the range tested; community
-objectives largely are not. Scenarios converge below roughly $10M and diverge
-above it. Rancher and conservation interests align on Alternative 1, fencing
-combined with fuelbreaks. The exchange rate between rancher gains and T&E plant
-losses differs sharply across scenarios; `results/table3.csv` gives the
-computed ratios.
+objectives largely are not. Rancher and conservation interests align on
+Alternative 1, fencing combined with fuelbreaks, which is the modal action under
+Rancher-Conservation at $20M in 18 of 21 optimized paddocks. The exchange rate
+between rancher gains and T&E plant losses differs sharply across scenarios;
+`results/table3.csv` gives the computed ratios. Alternatives 8 and 9 are never
+selected at any budget or weighting.
 
 ---
 
@@ -37,7 +45,9 @@ puuwaawaa-sdm/
 │   ├── pww_sdm_optimizer.py   # Integer program (PuLP/CBC)
 │   ├── figures.py             # Figures 2, 3, 4, S2, S3
 │   ├── generate_tables.py     # Tables 1, 2, 3
-│   └── sensitivity/           # Robustness and fire-feedback analyses
+│   └── sensitivity/
+│       ├── pww_sensitivity_analysis.py   # Figures S4-S9, Tables S2-S5
+│       └── test_parity.py                # Guards the two model copies
 ├── data/
 │   ├── pww_sdm_input_data.xlsx
 │   └── README_data.md
@@ -68,7 +78,8 @@ Run the optimizer:
 python src/pww_sdm_optimizer.py data/pww_sdm_input_data.xlsx results/
 ```
 
-It writes `sdm_results_summary.csv` (one row per scenario and budget),
+It writes `sdm_results_summary.csv` (one row per scenario and budget, with a
+`roadside_built` column),
 `sdm_results_paddock_detail.csv` (one row per scenario, budget, and paddock),
 and `sdm_scenario_definitions.csv` to `results/`. Those three files are already
 committed, so the figures and tables reproduce without re-solving.
@@ -84,9 +95,11 @@ python src/generate_tables.py --data-dir results --out-dir results
 `generate_tables.py` reads costs from the `paddock_data` sheet, so it needs the
 workbook in the same directory as the result CSVs.
 
-Sensitivity and fire-feedback analyses live in `src/sensitivity/`. See
-`src/sensitivity/README.md` for what each script does, how long it runs, and
-what it writes.
+Sensitivity, fire-feedback and landscape-action analyses live in
+`src/sensitivity/`. See `src/sensitivity/README.md` for the stages, runtimes and
+outputs. That directory keeps a second copy of the model so every elicited input
+can be swept; `test_parity.py` checks the two copies still agree and should be
+run after changing either.
 
 ---
 

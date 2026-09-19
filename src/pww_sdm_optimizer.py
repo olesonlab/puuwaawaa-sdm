@@ -6,6 +6,13 @@ Integer programming optimization for fire management at Puʻuwaʻawaʻa Forest R
 Selects one management alternative per paddock to maximize the weighted sum of
 normalized sub-objective scores, subject to a budget constraint.
 
+The roadside fuelbreak is a single landscape-level decision, not a paddock-level
+alternative: it is either built along the road or not, it is charged once, and
+when built it lowers fire probability in every paddock. Each scenario and budget
+is therefore solved twice, with and without the roadside fuelbreak, and the
+higher-scoring solution is kept. Paddocks choose among the ten paddock-level
+alternatives.
+
 Paddock 9 (580 T&E plants, the highest-value conservation site) is pre-assigned
 to Alternative 7 (full restoration) and excluded from optimization. The optimizer
 allocates the remaining budget across the other 21 paddocks.
@@ -51,6 +58,17 @@ warnings.filterwarnings("ignore", category=UserWarning)
 FIXED_PADDOCK_IDX = 8   # paddock 9
 FIXED_ALT_IDX = 6       # alternative 7
 
+# Alternative 2 (0-indexed: 1) is the roadside fuelbreak, handled as a
+# landscape-level decision rather than a paddock-level alternative.
+ROADSIDE_ALT_IDX = 1
+ROADSIDE_COST = 137677.06  # single cost for roadside fuel break, paddock_data[26,6]
+ROADSIDE_REDUCTION = 0.20   # proportional cut in fire probability when built
+
+# Paddocks the roadside fuelbreak protects. None means all paddocks, following
+# the flammability sheet ("20% reduction for all paddocks"). To limit it to the
+# paddocks along the road, list their 1-based numbers here.
+ROADSIDE_PADDOCKS = None
+
 
 # ============================================================
 # DATA EXTRACTION
@@ -88,7 +106,10 @@ def load_input_data(filepath):
             val = data.iloc[i + 2, 5 + j]
             costs[i, j] = val if pd.notna(val) else 0.0
 
-    shared_firebreak_cost = 80728.08  # from Decision_table
+    # The roadside fuelbreak column is not a per-paddock cost. The spreadsheet
+    # distributes the landscape cost across paddocks by area; the optimizer
+    # charges ROADSIDE_COST once instead, so the column is not used.
+    costs[:, ROADSIDE_ALT_IDX] = 0.0
 
     # -- T&E plant counts and native cover (raw ecological metrics) --
     rp = pd.read_excel(xls, "native_rareplants", header=None)
@@ -125,6 +146,10 @@ def load_input_data(filepath):
         for j in range(n_alts):
             fire_prob[i, j] = flam.iloc[i + 4, 5 + j]
 
+    # The roadside column of the fire model describes the landscape action, not
+    # a paddock treatment, so an untreated paddock keeps its baseline value.
+    fire_prob[:, ROADSIDE_ALT_IDX] = fire_prob_baseline
+
     return {
         "paddocks": paddocks,
         "costs": costs,
@@ -135,7 +160,7 @@ def load_input_data(filepath):
         "rancher_raw": rancher_raw,
         "fire_prob_baseline": fire_prob_baseline,
         "fire_prob": fire_prob,
-        "shared_firebreak_cost": shared_firebreak_cost,
+        "roadside_cost": ROADSIDE_COST,
     }
 
 
@@ -148,6 +173,10 @@ def load_input_data(filepath):
 # Scale: -1 (degradation) to 6 (full restoration).
 # Source: DOFAW managers (coauthors EP, KG, MN, MW).
 DIRECT_BENEFIT = np.array([1, 1, -1, 2, 3, 3, 6, 1, 2, 1, 1], dtype=float)
+
+# Paddock-level alternatives, in 0-indexed form: everything except the roadside
+# fuelbreak, which is decided once for the landscape.
+PADDOCK_ALTS = [j for j in range(11) if j != ROADSIDE_ALT_IDX]
 
 
 # ============================================================
@@ -183,6 +212,27 @@ def normalize_within_paddock(scores):
     return out
 
 
+def roadside_mask(n_paddocks):
+    """Boolean mask of the paddocks the roadside fuelbreak protects."""
+    if ROADSIDE_PADDOCKS is None:
+        return np.ones(n_paddocks, dtype=bool)
+    mask = np.zeros(n_paddocks, dtype=bool)
+    for p in ROADSIDE_PADDOCKS:
+        mask[p - 1] = True
+    return mask
+
+
+def apply_roadside(fire_prob, roadside_built):
+    """Lower fire probability in the protected paddocks when the roadside
+    fuelbreak is built."""
+    if not roadside_built:
+        return fire_prob
+    fp = fire_prob.copy()
+    mask = roadside_mask(fp.shape[0])
+    fp[mask, :] *= (1.0 - ROADSIDE_REDUCTION)
+    return fp
+
+
 def compute_action_effectiveness(fire_prob_baseline, fire_prob):
     """
     Compute conservation action effectiveness scores for each paddock x alternative.
@@ -197,7 +247,6 @@ def compute_action_effectiveness(fire_prob_baseline, fire_prob):
     Returns:
         action_raw: array (n_paddocks x n_alts) of combined scores
     """
-    n_paddocks = len(fire_prob_baseline)
     fire_reduction = fire_prob_baseline[:, None] - fire_prob  # positive = good
 
     max_reduction = fire_reduction.max()
@@ -211,31 +260,35 @@ def compute_action_effectiveness(fire_prob_baseline, fire_prob):
     return action_raw
 
 
-def prepare_scores(input_data):
+def prepare_scores(input_data, roadside_built):
     """
-    Build normalized score matrices for the 21 optimized paddocks.
+    Build normalized score matrices for the 21 optimized paddocks, for a given
+    state of the roadside fuelbreak.
 
     Conservation scores: within-paddock normalization of action effectiveness.
     T&E scores zeroed for paddocks with no T&E plants. All paddocks contribute
-    to the habitat objective (all have some native cover).
+    to the habitat objective.
 
     Community scores: global min-max normalization of raw scores.
 
+    Only the ten paddock-level alternatives are scored; columns follow
+    PADDOCK_ALTS order.
+
     Returns:
-        scores: dict of score arrays, each (21 x 11)
+        scores: dict of score arrays, each (21 x 10)
         opt_indices: list of 21 original paddock indices included in optimization
+        fire_prob: fire probability matrix (22 x 11) under this roadside state
+        fixed_score: normalized conservation score of the pre-assigned paddock
     """
     n_paddocks = input_data["costs"].shape[0]
     opt_indices = [i for i in range(n_paddocks) if i != FIXED_PADDOCK_IDX]
 
-    # Action effectiveness for conservation (all 22 paddocks, then subset)
+    fire_prob = apply_roadside(input_data["fire_prob"], roadside_built)
     action_raw = compute_action_effectiveness(
-        input_data["fire_prob_baseline"],
-        input_data["fire_prob"],
-    )
+        input_data["fire_prob_baseline"], fire_prob)
 
-    # Subset to 21 optimized paddocks
-    action_21 = action_raw[opt_indices, :]
+    # Subset to 21 optimized paddocks and the paddock-level alternatives
+    action_21 = action_raw[np.ix_(opt_indices, PADDOCK_ALTS)]
 
     # Within-paddock normalization
     action_within = normalize_within_paddock(action_21)
@@ -253,12 +306,21 @@ def prepare_scores(input_data):
     scores = {
         "te": te_scores,
         "habitat": habitat_scores,
-        "recreationist": normalize_to_01(input_data["community_raw"][opt_indices, :]),
-        "hunter": normalize_to_01(input_data["hunter_raw"][opt_indices, :]),
-        "rancher": normalize_to_01(input_data["rancher_raw"][opt_indices, :]),
+        "recreationist": normalize_to_01(
+            input_data["community_raw"][np.ix_(opt_indices, PADDOCK_ALTS)]),
+        "hunter": normalize_to_01(
+            input_data["hunter_raw"][np.ix_(opt_indices, PADDOCK_ALTS)]),
+        "rancher": normalize_to_01(
+            input_data["rancher_raw"][np.ix_(opt_indices, PADDOCK_ALTS)]),
     }
 
-    return scores, opt_indices
+    # Score of the pre-assigned paddock under full restoration
+    p9_action = action_raw[FIXED_PADDOCK_IDX, :]
+    p9_min, p9_max = p9_action.min(), p9_action.max()
+    fixed_score = ((p9_action[FIXED_ALT_IDX] - p9_min) / (p9_max - p9_min)
+                   if p9_max > p9_min else 0.0)
+
+    return scores, opt_indices, fire_prob, fixed_score
 
 
 # ============================================================
@@ -348,34 +410,34 @@ def effective_weights(scenario):
 # OPTIMIZER
 # ============================================================
 
-def optimize(scores, costs, budget, weights, shared_firebreak_cost=0):
+def optimize(scores, costs, budget, weights):
     """
-    Integer programming: select one alternative per paddock to maximize
-    weighted sum of normalized scores, subject to budget constraint.
+    Integer programming: select one paddock-level alternative per paddock to
+    maximize the weighted sum of normalized scores, subject to a budget
+    constraint.
 
-    Operates on the 21 optimized paddocks (paddock 9 excluded).
+    Operates on the 21 optimized paddocks (paddock 9 excluded) and the ten
+    paddock-level alternatives. The roadside fuelbreak is handled outside this
+    function: its cost is deducted from the budget and its effect is already in
+    the scores.
 
     Args:
-        scores: dict of normalized score arrays, each (21 x 11)
-        costs: array (21 x 11) of per-paddock costs
-        budget: maximum total cost (already reduced by paddock 9's cost)
+        scores: dict of normalized score arrays, each (21 x 10)
+        costs: array (21 x 10) of per-paddock costs
+        budget: maximum total cost available to the optimized paddocks
         weights: dict of effective weights per sub-objective
-        shared_firebreak_cost: fixed cost added if any paddock selects Alt 2
 
     Returns:
-        dict with status, choices (21-element array), total_cost,
-        objective_value, sub_scores, paddock_scores
+        dict with status, choices (21-element array of PADDOCK_ALTS indices),
+        total_cost, objective_value, sub_scores, paddock_scores
     """
     n_paddocks, n_alts = costs.shape
 
     prob = LpProblem("PWW_SDM", LpMaximize)
 
-    # Decision variables: x[i][j] = 1 if paddock i gets alternative j
+    # Decision variables: x[i][j] = 1 if paddock i gets paddock-level alternative j
     x = [[LpVariable(f"x_{i}_{j}", cat="Binary") for j in range(n_alts)]
          for i in range(n_paddocks)]
-
-    # Binary variable: 1 if any paddock selects Alt 2 (index 1)
-    any_alt2 = LpVariable("any_alt2", cat="Binary")
 
     # Objective: maximize weighted sum of normalized scores
     obj_terms = []
@@ -392,17 +454,9 @@ def optimize(scores, costs, budget, weights, shared_firebreak_cost=0):
     for i in range(n_paddocks):
         prob += lpSum(x[i]) == 1
 
-    # Constraint: link any_alt2 to paddock-level selections
-    for i in range(n_paddocks):
-        prob += x[i][1] <= any_alt2
-
     # Budget constraint
-    cost_terms = []
-    for i in range(n_paddocks):
-        for j in range(n_alts):
-            cost_terms.append(costs[i, j] * x[i][j])
-    cost_terms.append(shared_firebreak_cost * any_alt2)
-    prob += lpSum(cost_terms) <= budget
+    prob += lpSum(costs[i, j] * x[i][j]
+                  for i in range(n_paddocks) for j in range(n_alts)) <= budget
 
     prob.solve(pulp.PULP_CBC_CMD(msg=0))
 
@@ -417,8 +471,6 @@ def optimize(scores, costs, budget, weights, shared_firebreak_cost=0):
                 break
 
     total_cost = sum(costs[i, choices[i]] for i in range(n_paddocks))
-    if any(choices[i] == 1 for i in range(n_paddocks)):
-        total_cost += shared_firebreak_cost
 
     sub_scores = {}
     paddock_scores = {}
@@ -437,6 +489,34 @@ def optimize(scores, costs, budget, weights, shared_firebreak_cost=0):
     }
 
 
+def solve_scenario_budget(input_data, weights, budget):
+    """
+    Solve one scenario at one budget, trying both states of the roadside
+    fuelbreak and keeping the better-scoring solution.
+
+    Returns the winning result dict with the roadside state attached, or None
+    if neither state is feasible.
+    """
+    fixed_cost = input_data["costs"][FIXED_PADDOCK_IDX, FIXED_ALT_IDX]
+    best = None
+    for roadside_built in (False, True):
+        scores, opt_indices, fire_prob, fixed_score = prepare_scores(
+            input_data, roadside_built)
+        costs_opt = input_data["costs"][np.ix_(opt_indices, PADDOCK_ALTS)]
+        available = budget - fixed_cost - (ROADSIDE_COST if roadside_built else 0.0)
+        if available < 0:
+            continue
+        result = optimize(scores, costs_opt, available, weights)
+        if result["status"] != "Optimal":
+            continue
+        result.update(roadside_built=roadside_built, opt_indices=opt_indices,
+                      fire_prob=fire_prob, fixed_score=fixed_score,
+                      fixed_cost=fixed_cost)
+        if best is None or result["objective_value"] > best["objective_value"]:
+            best = result
+    return best
+
+
 # ============================================================
 # FIRE RISK ANALYSIS
 # ============================================================
@@ -446,8 +526,9 @@ def compute_fire_risk_reduction(fire_prob_baseline, fire_prob, choices_22):
     Compute fire risk reduction for a full 22-paddock portfolio.
 
     Args:
-        choices_22: array of length 22 with selected alternative (0-indexed)
-                    per paddock (including paddock 9 = Alt 7)
+        fire_prob: fire probability matrix under the chosen roadside state
+        choices_22: array of length 22 with the selected alternative (0-indexed
+                    into the full 11-alternative list) per paddock
     Returns:
         mean_reduction, paddock_reductions (length-22 array)
     """
@@ -484,8 +565,9 @@ def run_all(filepath, output_dir="."):
     Run the optimizer for all scenario x budget combinations.
 
     Paddock 9 is pre-assigned to Alternative 7. Its cost is subtracted from
-    each budget before optimizing over the remaining 21 paddocks. Results
-    are reported for all 22 paddocks (paddock 9 included as fixed).
+    each budget before optimizing over the remaining 21 paddocks. The roadside
+    fuelbreak is decided once per scenario and budget. Results are reported for
+    all 22 paddocks (paddock 9 included as fixed).
 
     Writes three CSV files:
         sdm_results_summary.csv: one row per scenario x budget
@@ -495,24 +577,16 @@ def run_all(filepath, output_dir="."):
     print("Loading input data...")
     input_data = load_input_data(filepath)
 
-    # Cost of pre-assigned paddock 9 to Alt 7
     fixed_cost = input_data["costs"][FIXED_PADDOCK_IDX, FIXED_ALT_IDX]
     fixed_paddock_num = FIXED_PADDOCK_IDX + 1
     print(f"Paddock {fixed_paddock_num} pre-assigned to Alt {FIXED_ALT_IDX + 1} "
           f"(full restoration), cost: ${fixed_cost:,.0f}")
     print(f"Paddock {fixed_paddock_num} T&E count: "
           f"{input_data['te_count'][FIXED_PADDOCK_IDX]:.0f}")
-
-    print("\nNormalizing scores (within-paddock for conservation, "
-          "global min-max for community)...")
-    scores, opt_indices = prepare_scores(input_data)
-
-    # Print score ranges for verification
-    for key, arr in scores.items():
-        print(f"  {key}: min={arr.min():.4f}, max={arr.max():.4f}")
-
-    # Costs for optimized paddocks only
-    costs_opt = input_data["costs"][opt_indices, :]
+    extent = ("all paddocks" if ROADSIDE_PADDOCKS is None
+              else f"paddocks {ROADSIDE_PADDOCKS}")
+    print(f"Roadside fuelbreak: ${ROADSIDE_COST:,.0f} once, "
+          f"{ROADSIDE_REDUCTION:.0%} fire probability reduction in {extent}")
 
     scenarios = build_scenarios()
 
@@ -524,63 +598,42 @@ def run_all(filepath, output_dir="."):
         print(f"  {sdef['label']:<26s} {w['te']:>6.3f} {w['habitat']:>8.3f} "
               f"{w['rancher']:>8.3f} {w['hunter']:>8.3f} {w['recreationist']:>8.3f}")
 
-    # Run optimizations
     results = []
     paddock_details = []
 
     for sname, sdef in scenarios.items():
         w = effective_weights(sdef)
         for budget in BUDGETS:
-            # Subtract paddock 9's fixed cost from the budget
-            available_budget = budget - fixed_cost
-            if available_budget < 0:
-                print(f"  WARNING: {sdef['label']} @ ${budget/1e6:.0f}M: "
-                      f"budget insufficient for paddock {fixed_paddock_num}")
-                continue
-
-            result = optimize(
-                scores, costs_opt, available_budget, w,
-                input_data["shared_firebreak_cost"],
-            )
+            result = solve_scenario_budget(input_data, w, budget)
             budget_label = f"${budget / 1e6:.0f}M"
 
-            if result["status"] != "Optimal":
-                print(f"  WARNING: {sdef['label']} @ {budget_label}: "
-                      f"{result['status']}")
+            if result is None:
+                print(f"  WARNING: {sdef['label']} @ {budget_label}: infeasible")
                 continue
 
-            # Reconstruct full 22-paddock choices array
+            opt_indices = result["opt_indices"]
+            roadside_built = result["roadside_built"]
+
+            # Reconstruct full 22-paddock choices in 11-alternative indexing
             choices_22 = np.zeros(22, dtype=int)
             choices_22[FIXED_PADDOCK_IDX] = FIXED_ALT_IDX
             for idx, orig_i in enumerate(opt_indices):
-                choices_22[orig_i] = result["choices"][idx]
+                choices_22[orig_i] = PADDOCK_ALTS[result["choices"][idx]]
 
-            # Total cost includes paddock 9
-            total_cost = result["total_cost"] + fixed_cost
+            total_cost = (result["total_cost"] + result["fixed_cost"]
+                          + (ROADSIDE_COST if roadside_built else 0.0))
 
             # Fire risk reduction across all 22 paddocks
             fire_mean, fire_paddock = compute_fire_risk_reduction(
-                input_data["fire_prob_baseline"],
-                input_data["fire_prob"],
-                choices_22,
-            )
+                input_data["fire_prob_baseline"], result["fire_prob"], choices_22)
 
-            # Compute sub-objective scores for paddock 9 (fixed)
-            action_raw_all = compute_action_effectiveness(
-                input_data["fire_prob_baseline"],
-                input_data["fire_prob"],
-            )
-            p9_action = action_raw_all[FIXED_PADDOCK_IDX, :]
-            p9_min, p9_max = p9_action.min(), p9_action.max()
-            if p9_max > p9_min:
-                p9_norm = (p9_action[FIXED_ALT_IDX] - p9_min) / (p9_max - p9_min)
-            else:
-                p9_norm = 0.0
+            p9_norm = result["fixed_score"]
 
             row = {
                 "scenario": sdef["label"],
                 "budget": budget,
                 "budget_label": budget_label,
+                "roadside_built": roadside_built,
                 "total_cost": total_cost,
                 "objective_value": result["objective_value"],
                 "te_score": result["sub_scores"]["te"] + p9_norm,
@@ -625,6 +678,7 @@ def run_all(filepath, output_dir="."):
                     "native_cover_pct": input_data["native_cover"][i],
                     "alternative": alt_idx + 1,
                     "alternative_name": ALTERNATIVE_NAMES[alt_idx],
+                    "roadside_built": roadside_built,
                     "fixed": is_fixed,
                     "cost": input_data["costs"][i, alt_idx],
                     "te_score": te_sc,
@@ -638,7 +692,8 @@ def run_all(filepath, output_dir="."):
             print(f"  {sdef['label']:<26s} @ {budget_label}: "
                   f"cost=${total_cost:>12,.0f}  "
                   f"obj={result['objective_value']:.4f}  "
-                  f"fire={fire_mean:.4f}")
+                  f"fire={fire_mean:.4f}  "
+                  f"roadside={'yes' if roadside_built else 'no'}")
 
     # Save results
     summary_df = pd.DataFrame(results)
@@ -682,6 +737,27 @@ def run_all(filepath, output_dir="."):
     return summary_df, detail_df, scenario_df
 
 
+def print_comparison_table(summary):
+    """Scenario comparison at $20M: change from the Balanced baseline and the
+    exchange ratio behind Table 2."""
+    at20 = summary[summary.budget == 20_000_000].set_index("scenario")
+    if "Balanced" not in at20.index:
+        return
+    base = at20.loc["Balanced"]
+    print("\n" + "=" * 60)
+    print("SCENARIO COMPARISON AT $20M (change from Balanced)")
+    print("=" * 60)
+    print(f"{'Scenario':<26s} {'dT&E':>7s} {'dRancher':>9s} {'dHunter':>8s} "
+          f"{'Ratio':>7s}")
+    for label, row in at20.iterrows():
+        d_te = row.te_score - base.te_score
+        d_ranch = row.rancher_score - base.rancher_score
+        d_hunt = row.hunter_score - base.hunter_score
+        ratio = d_ranch / -d_te if d_te < -1e-9 else float("nan")
+        print(f"  {label:<24s} {d_te:>+7.2f} {d_ranch:>+9.2f} {d_hunt:>+8.2f} "
+              f"{ratio:>7.2f}")
+
+
 # ============================================================
 # ENTRY POINT
 # ============================================================
@@ -710,3 +786,25 @@ if __name__ == "__main__":
         sort=False,
     )
     print(pivot.to_string(float_format="{:.4f}".format))
+
+    # Alternative distribution summary
+    print("\n" + "=" * 60)
+    print("ALTERNATIVE DISTRIBUTION")
+    print("=" * 60)
+    for scenario in summary["scenario"].unique():
+        print(f"\n  {scenario}:")
+        for budget_label in summary["budget_label"].unique():
+            bval = summary[(summary["scenario"] == scenario)
+                           & (summary["budget_label"] == budget_label)]
+            if bval.empty:
+                continue
+            bnum = bval["budget"].iloc[0]
+            road = "roadside yes" if bool(bval["roadside_built"].iloc[0]) else "roadside no"
+            d = detail[(detail["scenario"] == scenario)
+                       & (detail["budget"] == bnum)
+                       & (~detail["fixed"])]
+            counts = d["alternative_name"].value_counts()
+            alt_str = ", ".join(f"A{k.split(':')[0]}={v}" for k, v in counts.items())
+            print(f"    {budget_label}: {alt_str} (+A7 fixed in pad 9), {road}")
+
+    print_comparison_table(summary)
