@@ -63,7 +63,6 @@ def load(filepath):
     zones = [str(data.iloc[i + 2, 2]).strip() for i in range(N_P)]
     costs = np.array([[data.iloc[i + 2, 5 + j] if pd.notna(data.iloc[i + 2, 5 + j]) else 0.0
                        for j in range(N_A)] for i in range(N_P)], dtype=float)
-    costs[:, 1] = 0.0
     rp = pd.read_excel(xls, "native_rareplants", header=None)
     te_count = np.array([rp.iloc[i + 4, 2] for i in range(N_P)], dtype=float)
     ppl = pd.read_excel(xls, "People", header=None)
