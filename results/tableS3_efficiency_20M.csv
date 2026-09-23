@@ -1,0 +1,8 @@
+Scenario,Change in T&E,Change in habitat,Change in rancher,Change in hunter,Change in recreationist,Rancher pts per T&E pt lost,Hunter pts per T&E pt lost
+Balanced (S1),0.0,0.0,0.0,0.0,0.0,,
+Conservation Priority (S2),2.44,2.06,-8.42,-5.06,-0.78,,
+T&E Emphasis (S3),2.44,2.06,-8.42,-5.06,-0.78,,
+Habitat Emphasis (S4),1.88,2.36,-8.92,-5.06,-0.78,,
+Community Priority (S5),-4.27,-4.52,2.5,1.72,4.78,0.59,0.4
+Rancher-Conservation (S6),-0.36,-0.5,1.21,1.0,-1.22,3.31,2.74
+Hunter-Recreationist (S7),-5.77,-6.02,1.42,2.33,5.89,0.25,0.4

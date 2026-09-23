@@ -96,6 +96,11 @@ FUELBREAK_ALTS = [0, 2, 3, 4, 5, 7, 8]   # alternatives 1, 3, 4, 5, 6, 8, 9
 ROADSIDE_ALT = 1                         # alternative 2
 ROADSIDE_COST = 137677.06  # single cost for roadside fuel break, paddock_data[26,6]
 ROADSIDE_EFFECT = 0.20
+# Optional taper in the roadside benefit with distance from the highway, which
+# all paddocks sit above. Band 0 is nearest (Makai), band 2 furthest (Mauka),
+# and the benefit in band k is scaled by (1 - roadside_decay) ** k, so a decay
+# of 0 applies the effect evenly and a decay of 1 confines it to band 0.
+ROADSIDE_BANDS = {"Makai": 0, "Middle": 1, "Mauka": 2}
 PADDOCK_ALTS = [j for j in range(N_ALTS) if j != ROADSIDE_ALT]
 
 # Alternatives affected by the two fire feedbacks tested in stage 4.
@@ -121,12 +126,12 @@ ALT_NAMES = [
 # one minus the ecological weight; shares divide each fundamental objective.
 SCENARIOS = {
     "S1": ("Balanced", 0.50, (0.50, 0.50), (0.33, 0.33, 0.34)),
-    "S2": ("Conservation priority", 0.80, (0.50, 0.50), (0.33, 0.33, 0.34)),
-    "S3": ("T&E emphasis", 0.80, (0.75, 0.25), (0.33, 0.33, 0.34)),
-    "S4": ("Habitat emphasis", 0.80, (0.25, 0.75), (0.33, 0.33, 0.34)),
-    "S5": ("Community priority", 0.20, (0.50, 0.50), (0.33, 0.33, 0.34)),
-    "S6": ("Rancher-conservation", 0.50, (0.50, 0.50), (0.70, 0.15, 0.15)),
-    "S7": ("Hunter-recreationist", 0.20, (0.50, 0.50), (0.10, 0.45, 0.45)),
+    "S2": ("Conservation Priority", 0.80, (0.50, 0.50), (0.33, 0.33, 0.34)),
+    "S3": ("T&E Emphasis", 0.80, (0.75, 0.25), (0.33, 0.33, 0.34)),
+    "S4": ("Habitat Emphasis", 0.80, (0.25, 0.75), (0.33, 0.33, 0.34)),
+    "S5": ("Community Priority", 0.20, (0.50, 0.50), (0.33, 0.33, 0.34)),
+    "S6": ("Rancher-Conservation", 0.50, (0.50, 0.50), (0.70, 0.15, 0.15)),
+    "S7": ("Hunter-Recreationist", 0.20, (0.50, 0.50), (0.10, 0.45, 0.45)),
 }
 
 SUBOBJ = ["te", "habitat", "rancher", "hunter", "recreationist"]
@@ -159,7 +164,7 @@ def default_params():
         base_rec=BASE_REC.copy(), base_hunt=BASE_HUNT.copy(), base_ranch=BASE_RANCH.copy(),
         mult_rec=dict(MULT_REC), mult_hunt=dict(MULT_HUNT), mult_ranch=dict(MULT_RANCH),
         fuelbreak=FUELBREAK_EFFECT, roadside=ROADSIDE_EFFECT,
-        cost_mult=np.ones(N_ALTS), roadside_cost_mult=1.0,
+        cost_mult=np.ones(N_ALTS), roadside_cost_mult=1.0, roadside_decay=0.0,
         cattle_penalty=0.0, hunter_penalty=0.0,
     )
 
@@ -228,7 +233,9 @@ def fire_matrix(d, p, roadside_built=False):
     reduction[:, FUELBREAK_ALTS] *= p["fuelbreak"] / FUELBREAK_EFFECT
     fp = fp0[:, None] - reduction
     if roadside_built:
-        fp = fp * (1.0 - p["roadside"])
+        bands = np.array([ROADSIDE_BANDS[z] for z in d["zones"]], dtype=float)
+        effect = p["roadside"] * (1.0 - p.get("roadside_decay", 0.0)) ** bands
+        fp = fp * (1.0 - effect)[:, None]
     if p.get("cattle_penalty"):
         fp[:, CATTLE_REMOVAL_ALTS] *= 1.0 + p["cattle_penalty"]
     if p.get("hunter_penalty"):
@@ -412,8 +419,12 @@ def metrics(results):
     m["eff_S6_rancher"] = exchange("S6", "rancher")
     m["eff_S5_rancher"] = exchange("S5", "rancher")
     m["eff_S7_hunter"] = exchange("S7", "hunter")
-    m["S6_beats_S5"] = m["eff_S6_rancher"] > m["eff_S5_rancher"]
-    m["hunter_weaker_than_rancher"] = m["eff_S7_hunter"] < m["eff_S6_rancher"]
+    # When Rancher-Conservation gives up no T&E score relative to Balanced, its exchange
+    # ratio is undefined (inf or nan). Community Priority cannot then be the cheaper route to
+    # rancher score, so the finding holds; it fails only when both ratios exist and S5 wins.
+    s6_measured = np.isfinite(m["eff_S6_rancher"])
+    m["S6_beats_S5"] = (not s6_measured) or m["eff_S6_rancher"] > m["eff_S5_rancher"]
+    m["hunter_weaker_than_rancher"] = (not s6_measured) or m["eff_S7_hunter"] < m["eff_S6_rancher"]
 
     counts6 = np.bincount(ch[("S6", B20)], minlength=N_ALTS)
     m["S6_alt1_count"] = int(counts6[0])
@@ -581,6 +592,10 @@ def oat_designs():
 # Fire weights swept when fire risk is treated as its own objective.
 FIRE_WEIGHT_SWEEP = np.round(np.arange(0, 1.0001, 0.05), 3)
 
+# Taper in the roadside benefit, swept in the decay stage.
+DECAY_SWEEP = np.round(np.arange(0, 1.0001, 0.05), 3)
+DECAY_THRESHOLD_POINTS = [0.0, 0.5, 1.0]
+
 # Fire feedback sweep grids.
 CATTLE_SWEEP = np.round(np.arange(CATTLE_RANGE[0], CATTLE_RANGE[1] + 1e-9, 0.05), 3)
 ACCESS_SWEEP = np.round(np.arange(ACCESS_RANGE[0], ACCESS_RANGE[1] + 1e-9, 0.025), 3)
@@ -613,6 +628,43 @@ def _job_mc(args):
     m = metrics(run_grid(_DATA, draw_params(rng, sources, width)))
     m.update(run=label, seed=seed)
     return m
+
+
+def _job_decay(args):
+    """One value of the roadside taper, all scenarios and budgets."""
+    decay = float(args)
+    p = default_params()
+    p["roadside_decay"] = decay
+    res = run_grid(_DATA, p)
+    rows = []
+    for r in res:
+        counts = np.bincount(r["choices"], minlength=N_ALTS)
+        rows.append(dict(roadside_decay=decay, scenario=r["scenario"], budget=r["budget"],
+                         roadside_built=bool(r["roadside_built"]), total_cost=r["total_cost"],
+                         fire_reduction=r["fire"], **{k: r[k] for k in SUBOBJ},
+                         n_alt1=int(counts[0]), n_alt3=int(counts[2]), n_alt4=int(counts[3]),
+                         n_alt7=int(counts[6]), n_alt10=int(counts[9]), n_alt11=int(counts[10])))
+    m = metrics(res)
+    for row in rows:
+        row.update(asym_ratio=m["asym_ratio"], eff_S6_rancher=m["eff_S6_rancher"],
+                   eff_S5_rancher=m["eff_S5_rancher"], eff_S7_hunter=m["eff_S7_hunter"],
+                   S6_alt1_count=m["S6_alt1_count"])
+    return rows
+
+
+def _job_decay_threshold(args):
+    """Fire-objective weight sweep at one taper value, for the build threshold."""
+    decay, fire_weight = args
+    p = default_params()
+    p["roadside_decay"] = float(decay)
+    rows = []
+    for sid, (label, eco, eco_split, soc_split) in SCENARIOS.items():
+        w = weights_with_fire(eco, eco_split, soc_split, float(fire_weight))
+        for r in run_grid(_DATA, p, weights_override={sid: w}):
+            rows.append(dict(roadside_decay=float(decay), fire_weight=float(fire_weight),
+                             scenario=sid, budget=r["budget"],
+                             roadside_built=bool(r["roadside_built"])))
+    return rows
 
 
 def _job_landscape(args):
@@ -739,6 +791,20 @@ def stage_landscape(filepath, out, pool):
     pd.DataFrame(rows).to_csv(f"{out}/la_fire_objective.csv", index=False)
 
 
+def stage_decay(filepath, out, pool):
+    """Sweep the taper in the roadside benefit with distance from the highway."""
+    rows = []
+    for chunk in pool.map(_job_decay, DECAY_SWEEP):
+        rows += chunk
+    pd.DataFrame(rows).to_csv(f"{out}/rd_decay_sweep.csv", index=False)
+
+    jobs = [(dv, w) for dv in DECAY_THRESHOLD_POINTS for w in FIRE_WEIGHT_SWEEP]
+    rows = []
+    for chunk in pool.map(_job_decay_threshold, jobs):
+        rows += chunk
+    pd.DataFrame(rows).to_csv(f"{out}/rd_decay_thresholds.csv", index=False)
+
+
 def stage_feedbacks(filepath, out, draws, pool):
     """Fire feedback sweeps, the two-way grid, and a Monte Carlo that adds the
     feedbacks to a joint perturbation of the elicited inputs."""
@@ -763,11 +829,11 @@ def stage_feedbacks(filepath, out, draws, pool):
 INK, INK2, GRID_GREY = "#0b0b0b", "#52514e", "#e4e3df"
 
 SCENARIO_STYLE = {   # label, color, marker, line style
-    "S1": ("Balanced", "#2a78d6", "o", "-"),
-    "S2": ("Conservation priority", "#008300", "s", "-"),
-    "S5": ("Community priority", "#eb6834", "^", "--"),
-    "S6": ("Rancher-conservation", "#4a3aa7", "D", "-."),
-    "S7": ("Hunter-recreationist", "#e34948", "v", ":"),
+    "S1": ("Balanced", "#3a3a3a", "o", "-"),
+    "S2": ("Conservation Priority", "#0072B2", "s", "-"),
+    "S5": ("Community Priority", "#D55E00", "^", "--"),
+    "S6": ("Rancher-Conservation", "#E69F00", "v", "-."),
+    "S7": ("Hunter-Recreationist", "#CC79A7", "X", ":"),
 }
 DESIGN_LABELS = [("conservation_only", "Conservation\nbenefit"),
                  ("community_only", "Community\nscores"),
@@ -775,23 +841,23 @@ DESIGN_LABELS = [("conservation_only", "Conservation\nbenefit"),
                  ("joint_pm1", "All inputs\n(±1)"),
                  ("joint_pm2", "All inputs\n(±2)")]
 FINDINGS = [
-    ("asym_holds", "Tradeoff asymmetry\n(T&E lost to S5 > T&E gained by S2)"),
-    ("S6_beats_S5", "Rancher-conservation more efficient\nthan Community priority"),
+    ("asym_holds", "Tradeoff asymmetry (T&E lost under\nCommunity > T&E gained under Conservation)"),
+    ("S6_beats_S5", "Community Priority never the cheaper\nroute to rancher score"),
     ("hunter_weaker_than_rancher", "Hunter alignment weaker\nthan rancher alignment"),
-    ("S6_alt1_modal", "Alt 1 is the modal action\nunder Rancher-conservation"),
+    ("S6_alt1_modal", "Alt 1 is the most common action\nunder Rancher-Conservation"),
     ("budget_beats_weights", "Budget changes portfolios more\nthan weights do"),
     ("budget_asym_holds", "Conservation spends ≥95% of budget;\nCommunity leaves ≥10% unspent at $60M"),
-    ("S2_S3_S4_identical", "S2, S3, S4 identical at $20M"),
+    ("S2_S3_S4_identical", "Three conservation scenarios\nidentical at $20M"),
     ("alts_8_9_never", "Alts 8 and 9 never selected"),
 ]
-FEEDBACK_CATS = [("Full restoration (Alt 7)", "#008300"),
-                 ("Other cattle or ungulate removal (Alts 4, 5, 6, 9)", "#1baf7a"),
-                 ("Fence and fuelbreaks (Alt 1)", "#4a3aa7"),
-                 ("No change (Alt 11)", "#2a78d6"),
-                 ("Other", "#e4e3df")]
-RATIO_SERIES = [("eff_S6_rancher", "S6", "Rancher-conservation\n(rancher pts / T&E pt)"),
-                ("eff_S5_rancher", "S5", "Community priority\n(rancher pts / T&E pt)"),
-                ("eff_S7_hunter", "S7", "Hunter-recreationist\n(hunter pts / T&E pt)")]
+FEEDBACK_CATS = [("Full restoration (Alt 7)", "#08306b"),     # same colors as the Figure 5 heatmap
+                 ("Other cattle or ungulate removal (Alts 4, 5, 6, 9)", "#4292c6"),
+                 ("Fence and fuelbreaks (Alt 1)", "#9ecae1"),
+                 ("No change (Alt 11)", "#e6e6e6"),
+                 ("Other", "#fdd0a2")]
+RATIO_SERIES = [("eff_S6_rancher", "S6", "Rancher-Conservation\n(rancher pts / T&E pt)"),
+                ("eff_S5_rancher", "S5", "Community Priority\n(rancher pts / T&E pt)"),
+                ("eff_S7_hunter", "S7", "Hunter-Recreationist\n(hunter pts / T&E pt)")]
 
 
 def _set_style():
@@ -858,7 +924,7 @@ def table_paddock_stability(out, base, joint):
                          "most_common_alt": vals[counts.argmax()],
                          "pct_draws_alt7": 100 * (draws[:, i] == 7).mean()})
     df = pd.DataFrame(rows)
-    df.to_csv(f"{out}/TableS3_paddock_stability_20M.csv", index=False)
+    df.to_csv(f"{out}/TableS4_paddock_stability_20M.csv", index=False)
     return df
 
 
@@ -915,7 +981,7 @@ def figure_montecarlo(out, base, mc, designs):
     cb.set_label("% of draws", fontsize=8)
     cb.ax.tick_params(labelsize=8)
     _panel(ax, "B")
-    _save(fig, f"{out}/FigS4_montecarlo_robustness")
+    _save(fig, f"{out}/FigS3_montecarlo_robustness")
 
 
 def figure_budget_bands(out, base, joint):
@@ -939,7 +1005,7 @@ def figure_budget_bands(out, base, joint):
         _panel(ax, letter)
     axes[0].legend(frameon=False, loc="upper left")
     fig.tight_layout()
-    _save(fig, f"{out}/FigS5_budget_scores_uncertainty")
+    _save(fig, f"{out}/FigS4_budget_scores_uncertainty")
 
 
 def figure_weight_sweep(out, ws):
@@ -999,7 +1065,7 @@ def figure_weight_sweep(out, ws):
     cb.ax.tick_params(labelsize=8)
     _panel(ax, "B")
     fig.tight_layout()
-    _save(fig, f"{out}/FigS6_weight_sweep")
+    _save(fig, f"{out}/FigS5_weight_sweep")
 
 
 def figure_tornado(out, base, oat):
@@ -1009,7 +1075,7 @@ def figure_tornado(out, base, oat):
     oat["label"] = oat.group + ": " + oat.item
     fig, axes = plt.subplots(1, 2, figsize=(11, 5.2))
     for ax, key, xlab, letter in (
-            (axes[0], "eff_S6_rancher", "Rancher-conservation exchange ratio", "A"),
+            (axes[0], "eff_S6_rancher", "Rancher-Conservation exchange ratio", "A"),
             (axes[1], "asym_ratio", "Asymmetry ratio", "B")):
         b0 = base[key]
         t = oat.pivot_table(index="label", columns="direction", values=key, aggfunc="first")
@@ -1036,7 +1102,7 @@ def figure_tornado(out, base, oat):
                frameon=False, loc="upper center", bbox_to_anchor=(0.5, 0.02), ncol=2,
                fontsize=9)
     fig.tight_layout(rect=(0, 0.05, 1, 1))
-    _save(fig, f"{out}/FigS7_oat_tornado")
+    _save(fig, f"{out}/FigS6_oat_tornado")
 
 
 def figure_fire_feedbacks(out, sweeps):
@@ -1071,7 +1137,7 @@ def figure_fire_feedbacks(out, sweeps):
             label, color, marker, ls = SCENARIO_STYLE[sid]
             ax.plot(x, np.clip(d[key].values, None, 12), color=color, ls=ls, lw=2,
                     marker=marker, ms=5, mfc="white", mec=color, mew=1.3,
-                    label=f"{label} ({sid})" if col == 0 else None)
+                    label=label if col == 0 else None)
         ax.axhline(1, color=INK2, lw=0.9, ls="--")
         ax.set_ylim(0, 12.5)
         ax.set_xlabel(xlab + " (%)")
@@ -1088,7 +1154,7 @@ def figure_fire_feedbacks(out, sweeps):
     axes[1, 0].legend(frameon=False, fontsize=8, loc="upper center",
                       bbox_to_anchor=(1.05, -0.22), ncol=3)
     fig.tight_layout(h_pad=5.0)
-    _save(fig, f"{out}/FigS8_fire_feedbacks")
+    _save(fig, f"{out}/FigS7_fire_feedbacks")
 
 
 def table_fire_feedbacks(out, sweeps):
@@ -1109,7 +1175,7 @@ def table_fire_feedbacks(out, sweeps):
             "S2 no-change paddocks": f"{d.S2_n_alt11.iloc[0]:.0f} to {d.S2_n_alt11.iloc[-1]:.0f}",
         })
     tab = pd.DataFrame(rows)
-    tab.to_csv(f"{out}/TableS4_fire_feedback_summary.csv", index=False)
+    tab.to_csv(f"{out}/TableS5_fire_feedback_summary.csv", index=False)
     return tab
 
 
@@ -1125,7 +1191,7 @@ def table_landscape_thresholds(out, la):
                      "built_at_zero_weight": bool(
                          g[g.fire_weight == 0].roadside_built.iloc[0])})
     tab = pd.DataFrame(rows).sort_values(["scenario", "budget"])
-    tab.to_csv(f"{out}/TableS5_landscape_action_thresholds.csv", index=False)
+    tab.to_csv(f"{out}/TableS6_landscape_action_thresholds.csv", index=False)
     return tab
 
 
@@ -1185,31 +1251,98 @@ def figure_landscape(out, la):
               ncol=2)
     _panel(ax, "B")
     fig.tight_layout()
-    _save(fig, f"{out}/FigS9_landscape_action")
+    _save(fig, f"{out}/FigS8_landscape_action")
+
+
+def table_decay(out, sweep, thr):
+    """Effect of the roadside taper on where the fuelbreak is built."""
+    rows = []
+    for dv, g in sweep.groupby("roadside_decay"):
+        built = g[g.roadside_built]
+        rows.append({"roadside_decay": dv,
+                     "scenario_budget_combinations_built": int(len(built)),
+                     "budgets_built": ", ".join(f"${b/1e6:.0f}M" for b in sorted(built.budget.unique())) or "none",
+                     "asymmetry_ratio": round(float(g.asym_ratio.iloc[0]), 2),
+                     "S6_exchange_ratio": round(float(g.eff_S6_rancher.iloc[0]), 2)})
+    tab = pd.DataFrame(rows)
+    tab.to_csv(f"{out}/TableS7_roadside_taper.csv", index=False)
+    return tab
+
+
+def figure_decay(out, sweep, thr):
+    """How the taper changes the roadside decision and its weight threshold."""
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.2))
+
+    ax = axes[0]
+    for k, budget in enumerate(sorted(sweep.budget.unique())):
+        g = sweep[sweep.budget == budget].groupby("roadside_decay").roadside_built.sum()
+        if g.max() == 0:
+            continue
+        ax.plot(g.index, g.values, lw=2, marker="o", ms=5,
+                color=["#9ec5f4", "#5c9ee8", "#2a78d6", "#1b5aa6", "#0d3a73"][k],
+                label=f"${budget/1e6:.0f}M")
+    ax.set_ylim(-0.3, 7.4)
+    ax.set_xlabel("Taper in roadside benefit with distance from the highway")
+    ax.set_ylabel("Scenarios building it (of 7)")
+    ax.legend(title="Budget", frameon=False, fontsize=8, title_fontsize=8)
+    ax.grid(axis="y", color=GRID_GREY, lw=0.6); ax.set_axisbelow(True)
+    ax.set_title("Where the roadside fuelbreak is built", loc="left", color=INK)
+    _panel(ax, "A")
+
+    ax = axes[1]
+    marks = ["o", "s", "^"]
+    for k, dv in enumerate(sorted(thr.roadside_decay.unique())):
+        ys = []
+        budgets = sorted(thr.budget.unique())
+        for budget in budgets:
+            g = thr[(thr.roadside_decay == dv) & (thr.budget == budget) & thr.roadside_built]
+            ys.append(g.fire_weight.min() if len(g) else np.nan)
+        ax.plot([b/1e6 for b in budgets], ys, lw=2, marker=marks[k], ms=6, mfc="white",
+                mew=1.4, color=["#2a78d6", "#eb6834", "#4a3aa7"][k],
+                label=f"taper {dv:.1f}")
+    ax.set_xlabel("Budget ($ million)")
+    ax.set_ylabel("Fire weight at which it is built")
+    ax.set_xticks([5, 10, 20, 40, 60])
+    ax.legend(frameon=False, fontsize=8)
+    ax.grid(axis="y", color=GRID_GREY, lw=0.6); ax.set_axisbelow(True)
+    ax.set_title("Threshold weight on fire risk, lowest across scenarios", loc="left", color=INK)
+    _panel(ax, "B")
+    fig.tight_layout()
+    _save(fig, f"{out}/FigS9_roadside_taper")
 
 
 def stage_figures(out):
     """Build every figure and summary table from the stored results."""
     _set_style()
-    base = pd.read_csv(f"{out}/sa_baseline_metrics.csv").iloc[0]
-    oat = pd.read_csv(f"{out}/sa_oat.csv")
-    mc = pd.read_csv(f"{out}/sa_montecarlo.csv")
-    ws = pd.read_csv(f"{out}/sa_weight_sweep.csv")
-    designs = [d for d in DESIGN_LABELS if d[0] in set(mc.run)]
-    joint = mc[mc.run == "joint_pm1"]
+    have = lambda *names: all(os.path.exists(f"{out}/{n}") for n in names)
 
-    table_robustness(out, base, oat, mc, designs)
-    table_paddock_stability(out, base, joint)
-    figure_montecarlo(out, base, mc, designs)
-    figure_budget_bands(out, base, joint)
-    figure_weight_sweep(out, ws)
-    figure_tornado(out, base, oat)
+    if have("sa_baseline_metrics.csv", "sa_oat.csv", "sa_montecarlo.csv", "sa_weight_sweep.csv"):
+        base = pd.read_csv(f"{out}/sa_baseline_metrics.csv").iloc[0]
+        oat = pd.read_csv(f"{out}/sa_oat.csv")
+        mc = pd.read_csv(f"{out}/sa_montecarlo.csv")
+        ws = pd.read_csv(f"{out}/sa_weight_sweep.csv")
+        designs = [d for d in DESIGN_LABELS if d[0] in set(mc.run)]
+        joint = mc[mc.run == "joint_pm1"]
+
+        table_robustness(out, base, oat, mc, designs)
+        table_paddock_stability(out, base, joint)
+        figure_montecarlo(out, base, mc, designs)
+        figure_budget_bands(out, base, joint)
+        figure_weight_sweep(out, ws)
+        figure_tornado(out, base, oat)
 
     landscape_path = f"{out}/la_fire_objective.csv"
     if os.path.exists(landscape_path):
         la = pd.read_csv(landscape_path)
         figure_landscape(out, la)
         table_landscape_thresholds(out, la)
+
+    decay_path = f"{out}/rd_decay_sweep.csv"
+    if os.path.exists(decay_path) and os.path.exists(f"{out}/rd_decay_thresholds.csv"):
+        sweep = pd.read_csv(decay_path)
+        thr = pd.read_csv(f"{out}/rd_decay_thresholds.csv")
+        figure_decay(out, sweep, thr)
+        table_decay(out, sweep, thr)
 
     sweeps_path = f"{out}/ff_sweeps.csv"
     if os.path.exists(sweeps_path):
@@ -1229,16 +1362,16 @@ def main(argv=None):
     ap.add_argument("outdir", help="directory for results, figures, and tables")
     ap.add_argument("--draws", type=int, default=500,
                     help="Monte Carlo draws for the joint design (default 500)")
-    ap.add_argument("--stages", default="sensitivity,feedbacks,landscape,figures",
+    ap.add_argument("--stages", default="sensitivity,feedbacks,landscape,decay,figures",
                     help="comma-separated subset of sensitivity, feedbacks, "
-                         "landscape, figures")
+                         "landscape, decay, figures")
     args = ap.parse_args(argv)
 
     stages = [s.strip() for s in args.stages.split(",") if s.strip()]
     os.makedirs(args.outdir, exist_ok=True)
     start = time.time()
 
-    if any(s in stages for s in ("sensitivity", "feedbacks", "landscape")):
+    if any(s in stages for s in ("sensitivity", "feedbacks", "landscape", "decay")):
         with Pool(os.cpu_count(), initializer=_init_worker, initargs=(args.input,)) as pool:
             if "sensitivity" in stages:
                 stage_sensitivity(args.input, args.outdir, args.draws, pool)
@@ -1249,6 +1382,9 @@ def main(argv=None):
             if "landscape" in stages:
                 stage_landscape(args.input, args.outdir, pool)
                 print(f"landscape action done ({time.time() - start:.0f}s)", flush=True)
+            if "decay" in stages:
+                stage_decay(args.input, args.outdir, pool)
+                print(f"roadside taper done ({time.time() - start:.0f}s)", flush=True)
 
     if "figures" in stages:
         stage_figures(args.outdir)

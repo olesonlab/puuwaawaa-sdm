@@ -13,7 +13,7 @@ specifically whether removing grazers should raise it.
 
 | File | What it does |
 | --- | --- |
-| `pww_sensitivity_analysis.py` | The whole analysis. It re-expresses the model of `src/pww_sdm_optimizer.py` with every elicited or assumed input as an explicit parameter, then runs five stages: one-at-a-time perturbation of each input, Monte Carlo perturbation jointly and by source, continuous sweeps of the objective weights, sweeps of two fire feedbacks the consequence table omits, and a sweep of the weight on fire risk treated as a fundamental objective on an absolute scale. |
+| `pww_sensitivity_analysis.py` | The whole analysis. It re-expresses the model of `src/pww_sdm_optimizer.py` with every elicited or assumed input as an explicit parameter, then runs one-at-a-time perturbation of each input, Monte Carlo perturbation jointly and by source, continuous sweeps of the objective weights, sweeps of two fire feedbacks the consequence table omits, a sweep of the weight on fire risk treated as a fundamental objective on an absolute scale, and a sweep of a taper in the roadside fuelbreak benefit with distance from the highway. |
 | `test_parity.py` | Compares this file's copy of the model against `src/pww_sdm_optimizer.py` at default parameters, in both roadside states. Run it after touching either one. |
 
 No dependencies beyond those in `requirements.txt`.
@@ -25,14 +25,21 @@ python pww_sensitivity_analysis.py ../../data/pww_sdm_input_data.xlsx out --draw
 ```
 
 Stages run separately with `--stages sensitivity`, `--stages feedbacks`,
-`--stages landscape`, or `--stages figures`. The figure stage reads the CSVs, so
+`--stages landscape`, `--stages decay`, or `--stages figures`. The figure stage reads the CSVs, so
 figures can be redone without reoptimizing. Timing scales with cores: `--draws
 500` is roughly 20 to 30 minutes on 8 cores. `--draws 20` confirms the pipeline
 works, though the percentages mean nothing at that size.
 
 Outputs are `sa_baseline_metrics.csv`, `sa_oat.csv`, `sa_montecarlo.csv`,
 `sa_weight_sweep.csv`, `ff_sweeps.csv`, `ff_grid.csv`, `ff_montecarlo.csv`,
-`la_fire_objective.csv`, Figures S4 to S9, and Tables S2 to S5.
+`la_fire_objective.csv`, `rd_decay_sweep.csv`, `rd_decay_thresholds.csv`,
+Figures S3 to S9, and Tables S2 and S4 to S7, numbered as in Appendix S1.
+
+The second and third findings in Table S2 (Community Priority is never the
+cheaper route to rancher score, and hunter alignment is weaker than rancher
+alignment) count a draw as holding when Rancher-Conservation gives up no T&E
+score, since its exchange ratio is then undefined and Community Priority cannot
+be cheaper. An earlier version counted those draws as failures.
 
 ## Why parity is checked
 

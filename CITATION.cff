@@ -5,7 +5,7 @@ abstract: >-
   Integer-programming optimizer, figure and table scripts, and sensitivity
   and fire-feedback analyses for a structured decision making study of 11
   management alternatives across 22 paddocks at Puʻuwaʻawaʻa Forest Reserve,
-  Hawaiʻi, under seven stakeholder weighting scenarios and five budget levels.
+  Hawaiʻi, under seven weighting scenarios and five budget levels.
 type: software
 license: MIT
 repository-code: "https://github.com/olesonlab/puuwaawaa-sdm"

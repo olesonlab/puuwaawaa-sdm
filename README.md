@@ -15,7 +15,7 @@ A companion paper on normalization methods is at
 ## Overview
 
 An integer program evaluates management alternatives across 22 paddocks at
-Puʻuwaʻawaʻa Forest Reserve under seven stakeholder weighting scenarios and five
+Puʻuwaʻawaʻa Forest Reserve under seven weighting scenarios and five
 budget levels ($5M to $60M). Scores are normalized within each paddock, which
 keeps spatial priority separate from action effectiveness. The companion paper
 explains why that choice matters.
@@ -43,10 +43,11 @@ selected at any budget or weighting.
 puuwaawaa-sdm/
 ├── src/
 │   ├── pww_sdm_optimizer.py   # Integer program (PuLP/CBC)
-│   ├── figures.py             # Figures 2, 3, 4, S2, S3
-│   ├── generate_tables.py     # Tables 1, 2, 3
+│   ├── figures.py             # Figures 3, 4, 5 and S1, S2
+│   ├── figure1_composite.py   # Figure 1 (map and photographs; inputs not included)
+│   ├── generate_tables.py     # Table 1 and Tables S1, S3
 │   └── sensitivity/
-│       ├── pww_sensitivity_analysis.py   # Figures S4-S9, Tables S2-S5
+│       ├── pww_sensitivity_analysis.py   # Figures S3-S9, Tables S2, S4-S7
 │       └── test_parity.py                # Guards the two model copies
 ├── data/
 │   ├── pww_sdm_input_data.xlsx
@@ -94,6 +95,21 @@ python src/generate_tables.py --data-dir results --out-dir results
 
 `generate_tables.py` reads costs from the `paddock_data` sheet, so it needs the
 workbook in the same directory as the result CSVs.
+
+Figure 2, the objectives hierarchy, was drawn by hand and has no script. The
+normalization comparison in Appendix S1 (Figures S10 and S11, Tables S8 to S10)
+is produced in the
+[puuwaawaa-normalization](https://github.com/olesonlab/puuwaawaa-normalization)
+repository.
+
+| Paper item | Script | Output |
+| --- | --- | --- |
+| Figure 1 | `src/figure1_composite.py` | `Figure_1_map_photos` |
+| Figures 3 to 5, S1, S2 | `src/figures.py` | `Figure_3_asymmetry` and so on |
+| Table 1 | `src/generate_tables.py` | `results/table1.csv` |
+| Table S1 | `src/generate_tables.py` | `results/tableS1_scenario_weights.csv` |
+| Table S3 | `src/generate_tables.py` | `results/tableS3_efficiency_20M.csv` |
+| Figures S3 to S9, Tables S2, S4 to S7 | `src/sensitivity/pww_sensitivity_analysis.py` | see `src/sensitivity/README.md` |
 
 Sensitivity, fire-feedback and landscape-action analyses live in
 `src/sensitivity/`. See `src/sensitivity/README.md` for the stages, runtimes and

@@ -1,349 +1,225 @@
 """
-Figures for the Puʻuwaʻawaʻa SDM paper
-======================================================================
-Main text figures: 2, 3, 4
-Supporting Information figures: S2, S3
+Main-text Figures 3-5 and SI Figures S1-S2 for the Puʻuwaʻawaʻa SDM paper
+(Conservation Science and Practice, CSP2-26-0352, revision).
 
-Figure assignments (post-renumbering):
-    Figure 2  — Asymmetric tradeoffs at $20M (bar chart of score changes)
-    Figure 3  — Sub-objective scores across budgets (line plots)
-    Figure 4  — Management portfolios heatmap at $20M
-    Figure S2 — Conservation–rancher tradeoff scatter at $20M
-    Figure S3 — Restoration progression under Conservation Priority
+Reads the optimizer output (sdm_results_summary.csv, sdm_results_paddock_detail.csv)
+and writes PDF (vector) and 600 dpi PNG files. Figure titles are left off because
+the captions carry them. Scenario names and colors match the SI sensitivity figures.
 
-Usage:
-    python figures.py
-    python figures.py --data-dir /path/to/data --out-dir /path/to/output
+    python src/figures.py --data-dir results --out-dir figures
+
+Figure 1 (map and photographs) is assembled by figure1_composite.py and Figure 2
+(objectives hierarchy) was drawn by hand, so neither is produced here.
 """
-
 import argparse
 import os
-from pathlib import Path
 
-import numpy as np
-import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.colors import ListedColormap, BoundaryNorm
+from matplotlib.patches import Patch
+import numpy as np
+import pandas as pd
 
-OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__)) or "."
-INPUT_DIR  = OUTPUT_DIR
+_ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+_ap.add_argument("--data-dir", default="results", help="folder with the optimizer CSVs")
+_ap.add_argument("--out-dir", default="figures", help="folder for the figure files")
+_args = _ap.parse_args()
+RESULTS, OUT = _args.data_dir, _args.out_dir
+os.makedirs(OUT, exist_ok=True)
 
-def set_dirs(data_dir, out_dir):
-    global INPUT_DIR, OUTPUT_DIR
-    INPUT_DIR  = str(data_dir)
-    OUTPUT_DIR = str(out_dir)
+MM = 1 / 25.4
+FULL_W = 170 * MM          # full page width
 
 plt.rcParams.update({
-    "font.family": "sans-serif", "font.size": 10,
-    "axes.titlesize": 11, "axes.labelsize": 10,
-    "xtick.labelsize": 9, "ytick.labelsize": 9,
-    "legend.fontsize": 9, "figure.dpi": 300,
-    "savefig.dpi": 300, "savefig.bbox": "tight",
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Arial", "Liberation Sans", "DejaVu Sans"],
+    "font.size": 8, "axes.labelsize": 8, "axes.titlesize": 8.5,
+    "xtick.labelsize": 7.5, "ytick.labelsize": 7.5, "legend.fontsize": 7.5,
+    "axes.spines.top": False, "axes.spines.right": False,
+    "axes.edgecolor": "#52514e", "xtick.color": "#52514e", "ytick.color": "#52514e",
+    "axes.linewidth": 0.7, "pdf.fonttype": 42, "savefig.bbox": "tight",
 })
 
-SCENARIO_COLORS = {
-    "Balanced": "#2196F3", "Conservation priority": "#388E3C",
-    "T&E emphasis": "#1B5E20", "Habitat emphasis": "#66BB6A",
-    "Community priority": "#D32F2F", "Rancher-conservation": "#F57C00",
-    "Hunter-recreationist": "#7B1FA2",
+# One scenario identity for every figure in the paper (Okabe-Ito hues, with marker
+# and line-style redundancy so identity never rests on color alone).
+SCEN = {  # csv name: (label, color, marker, linestyle)
+    "Balanced":              ("Balanced",              "#3a3a3a", "o", "-"),
+    "Conservation priority": ("Conservation Priority", "#0072B2", "s", "-"),
+    "T&E emphasis":          ("T&E Emphasis",          "#56B4E9", "D", (0, (4, 2))),
+    "Habitat emphasis":      ("Habitat Emphasis",      "#009E73", "P", (0, (1, 1.5))),
+    "Community priority":    ("Community Priority",    "#D55E00", "^", "--"),
+    "Rancher-conservation":  ("Rancher-Conservation",  "#E69F00", "v", "-."),
+    "Hunter-recreationist":  ("Hunter-Recreationist",  "#CC79A7", "X", ":"),
 }
-SCENARIO_ORDER = [
-    "Balanced", "Conservation priority", "T&E emphasis",
-    "Habitat emphasis", "Community priority",
-    "Rancher-conservation", "Hunter-recreationist",
-]
-ALT_COLORS = {
-    1: "#4CAF50", 2: "#BBDEFB", 3: "#F44336", 4: "#81C784",
-    5: "#2E7D32", 6: "#1B5E20", 7: "#004D40", 8: "#90A4AE",
-    9: "#78909C", 10: "#B0BEC5", 11: "#ECEFF1",
+ORDER = list(SCEN)
+BUDGETS = [5, 10, 20, 40, 60]
+
+summ = pd.read_csv(f"{RESULTS}/sdm_results_summary.csv")
+summ["budget_M"] = summ.budget / 1e6
+det = pd.read_csv(f"{RESULTS}/sdm_results_paddock_detail.csv")
+det["budget_M"] = det.budget / 1e6
+
+
+def save(fig, name):
+    fig.savefig(f"{OUT}/{name}.pdf")
+    fig.savefig(f"{OUT}/{name}.png", dpi=600)
+    plt.close(fig)
+    print("wrote", name)
+
+
+def panel(ax, letter):
+    ax.text(-0.13, 1.03, letter, transform=ax.transAxes, fontsize=10, fontweight="bold")
+
+
+# ---------------------------------------------------------------- Figure 3
+def figure3():
+    s20 = summ[summ.budget_M == 20].set_index("scenario")
+    keys = ["te_score", "habitat_score", "rancher_score", "hunter_score", "recreationist_score"]
+    names = ["T&E plants", "Native habitat", "Ranching", "Hunting", "Recreation"]
+    delta = s20[keys] - s20.loc["Balanced", keys]
+    show = ["Conservation priority", "Community priority", "Rancher-conservation"]
+    fig, ax = plt.subplots(figsize=(FULL_W, 72 * MM))
+    x = np.arange(len(keys)); w = 0.26
+    for i, s in enumerate(show):
+        lab, col = SCEN[s][0], SCEN[s][1]
+        vals = delta.loc[s].values
+        bars = ax.bar(x + (i - 1) * w, vals, w * 0.92, color=col, label=lab,
+                      hatch="////" if s == "Rancher-conservation" else None,
+                      edgecolor="white", linewidth=0.4)
+        for b, v in zip(bars, vals):
+            ax.text(b.get_x() + b.get_width() / 2, v + (0.18 if v >= 0 else -0.18),
+                    f"{v:+.1f}".replace("-", "\u2212"), ha="center", va="bottom" if v >= 0 else "top",
+                    fontsize=6.5, color="#262626")
+    ax.axhline(0, color="#262626", linewidth=0.7)
+    ax.set_xticks(x, names)
+    ax.set_ylabel("Change from Balanced at $20 million\n(score points)")
+    ax.set_ylim(-9.8, 6)
+    ax.yaxis.grid(True, color="#e4e3df", linewidth=0.5); ax.set_axisbelow(True)
+    ax.legend(frameon=False, loc="lower left", ncol=3, bbox_to_anchor=(0, 1.0))
+    save(fig, "Figure_3_asymmetry")
+
+
+# ---------------------------------------------------------------- Figure 4
+def figure4():
+    fig, axes = plt.subplots(1, 2, figsize=(FULL_W, 70 * MM))
+    for ax, key, ylab, letter in [(axes[0], "te_score", "Total T&E plant score", "A"),
+                                  (axes[1], "rancher_score", "Total rancher score", "B")]:
+        for s in ORDER:
+            lab, col, mk, ls = SCEN[s]
+            d = summ[summ.scenario == s].sort_values("budget_M")
+            ax.plot(d.budget_M, d[key], color=col, marker=mk, linestyle=ls, linewidth=1.4,
+                    markersize=4.5, markeredgecolor="white", markeredgewidth=0.5, label=lab,
+                    zorder=3 if s != "T&E emphasis" else 4)
+        ax.set_xscale("log")
+        ax.set_xticks(BUDGETS, [f"${b}M" for b in BUDGETS])
+        ax.minorticks_off()
+        ax.set_xlabel("Budget (log scale)")
+        ax.set_ylabel(ylab)
+        ax.yaxis.grid(True, color="#e4e3df", linewidth=0.5); ax.set_axisbelow(True)
+        panel(ax, letter)
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.12))
+    fig.tight_layout(w_pad=3)
+    save(fig, "Figure_4_budget_curves")
+
+
+# ---------------------------------------------------------------- Figure 5
+ALT_STYLE = {  # alternative: (legend label, color, text color)
+    1: ("1  Fence + fuelbreaks", "#9ecae1", "#1a1a1a"),
+    3: ("3  Fence + intensify grazing", "#D55E00", "white"),
+    4: ("4  Fence + fuelbreak + remove cattle", "#4292c6", "white"),
+    5: ("5  Alt 4 + remove ungulates", "#2171b5", "white"),
+    6: ("6  Alt 5 + weed control around T&E", "#08519c", "white"),
+    7: ("7  Full restoration", "#08306b", "white"),
+    10: ("10  Fence + plant natives", "#d9d0e9", "#1a1a1a"),
+    11: ("11  No change", "#e6e6e6", "#1a1a1a"),
 }
-ALT_SHORT = {
-    1: "Fence+fuel", 2: "Fuelbreak", 3: "Graze+",
-    4: "Fence-cattle", 5: "Fence-ungul", 6: "Alt5+weed",
-    7: "Full restore", 8: "Fence+weed", 9: "F-cattle+weed",
-    10: "Fence+plant", 11: "No change",
-}
 
 
-def fig2_asymmetry():
-    df   = pd.read_csv(os.path.join(INPUT_DIR, "sdm_results_summary.csv"))
-    df20 = df[df["budget"] == 20_000_000].copy()
-    bal  = df20[df20["scenario"] == "Balanced"].iloc[0]
-    con  = df20[df20["scenario"] == "Conservation priority"].iloc[0]
-    com  = df20[df20["scenario"] == "Community priority"].iloc[0]
-    rc   = df20[df20["scenario"] == "Rancher-conservation"].iloc[0]
-
-    metrics = ["te_score","habitat_score","rancher_score","hunter_score","recreationist_score"]
-    labels  = ["T&E", "Habitat", "Rancher", "Hunter", "Recreationist"]
-    delta_con = [con[m] - bal[m] for m in metrics]
-    delta_com = [com[m] - bal[m] for m in metrics]
-    delta_rc  = [rc[m]  - bal[m] for m in metrics]
-
-    rc_ranch_gain = rc["rancher_score"] - bal["rancher_score"]
-    rc_te_loss    = bal["te_score"]     - rc["te_score"]
-    ratio         = rc_ranch_gain / rc_te_loss if rc_te_loss != 0 else float("inf")
-
-    fig, ax = plt.subplots(figsize=(9, 5))
-    x = np.arange(len(labels)); width = 0.25
-    ax.bar(x - width, delta_con, width, label="Conservation Priority (80% eco)",
-           color="#388E3C", edgecolor="white", linewidth=0.5)
-    ax.bar(x, delta_com, width, label="Community Priority (80% soc)",
-           color="#D32F2F", edgecolor="white", linewidth=0.5)
-    ax.bar(x + width, delta_rc, width, label="Rancher-Conservation (50/50, 70% ranch)",
-           color="#F57C00", edgecolor="white", linewidth=0.5)
-    ax.axhline(0, color="black", linewidth=0.5)
-    ax.set_xticks(x); ax.set_xticklabels(labels)
-    ax.set_ylabel("Change from Balanced baseline\n(score points)")
-    ax.legend(frameon=False, fontsize=8)
-    ax.annotate(f"Rancher-Cons:\n{ratio:.2f} rancher pts\nper T&E pt lost",
-                xy=(2 + width, delta_rc[2]), xytext=(3.5, delta_rc[2] - 1),
-                fontsize=7, color="#F57C00",
-                arrowprops=dict(arrowstyle="->", color="#F57C00", lw=0.8))
-    ax.set_title("Figure 2. Asymmetric tradeoffs at $20 million:\nscore changes from Balanced baseline",
-                 fontsize=11, fontweight="bold")
-    plt.tight_layout()
-    for ext in ["png", "svg"]:
-        fig.savefig(os.path.join(OUTPUT_DIR, f"fig2_asymmetry.{ext}"), bbox_inches="tight")
-    plt.close()
-    print("Figure 2 saved.")
+def figure5():
+    d20 = det[det.budget_M == 20]
+    grid = np.array([d20[d20.scenario == s].sort_values("paddock").alternative.values for s in ORDER])
+    fig, ax = plt.subplots(figsize=(FULL_W, 62 * MM))
+    for r in range(grid.shape[0]):
+        for c in range(grid.shape[1]):
+            a = int(grid[r, c]); lab, col, tc = ALT_STYLE[a]
+            ax.add_patch(plt.Rectangle((c, r), 1, 1, facecolor=col, edgecolor="white", linewidth=0.8))
+            ax.text(c + 0.5, r + 0.5, str(a), ha="center", va="center", fontsize=6.5, color=tc,
+                    fontweight="bold")
+    ax.set_xlim(0, grid.shape[1]); ax.set_ylim(grid.shape[0], 0)
+    ax.set_xticks(np.arange(grid.shape[1]) + 0.5, [str(i + 1) for i in range(grid.shape[1])])
+    ax.set_yticks(np.arange(grid.shape[0]) + 0.5, [SCEN[s][0] for s in ORDER])
+    ax.set_xlabel("Paddock (Paddock 9 pre-assigned to full restoration)")
+    ax.tick_params(length=0)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+    used = sorted(set(grid.ravel()))
+    handles = [Patch(facecolor=ALT_STYLE[a][1], edgecolor="#bdbdbd", linewidth=0.4,
+                     label=ALT_STYLE[a][0]) for a in used]
+    ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=3,
+              frameon=False, handlelength=1.2, columnspacing=1.5)
+    save(fig, "Figure_5_portfolios_heatmap")
 
 
-def fig3_budget_curves():
-    df = pd.read_csv(os.path.join(INPUT_DIR, "sdm_results_summary.csv"))
-    df["budget_M"] = df["budget"] / 1e6
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-
-    ax = axes[0]
-    for scen in SCENARIO_ORDER:
-        sub = df[df["scenario"] == scen].sort_values("budget")
-        ax.plot(sub["budget_M"], sub["te_score"], marker="o", markersize=5,
-                linewidth=2, color=SCENARIO_COLORS[scen], label=scen)
-    ax.set_xlabel("Budget ($ million)"); ax.set_ylabel("Total T&E score\n(sum across 22 paddocks)")
-    ax.set_xlim(0, 65); ax.set_title("(a) Conservation outcome", fontweight="bold")
-
-    ax = axes[1]
-    for scen in SCENARIO_ORDER:
-        sub = df[df["scenario"] == scen].sort_values("budget")
-        ax.plot(sub["budget_M"], sub["rancher_score"], marker="s", markersize=5,
-                linewidth=2, color=SCENARIO_COLORS[scen], label=scen)
-    ax.set_xlabel("Budget ($ million)"); ax.set_ylabel("Total rancher score\n(sum across 22 paddocks)")
-    ax.set_xlim(0, 65); ax.set_title("(b) Rancher outcome", fontweight="bold")
-
-    # Shared legend below both panels — avoids overlap with lines
-    handles = [plt.Line2D([0],[0], color=SCENARIO_COLORS[s], marker="o",
-               linewidth=2, markersize=5, label=s) for s in SCENARIO_ORDER]
-    fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False,
-               fontsize=8, bbox_to_anchor=(0.5, -0.08))
-    fig.suptitle("Figure 3. Sub-objective scores across budgets under seven weighting scenarios",
-                 fontsize=11, fontweight="bold")
-    plt.tight_layout(rect=[0, 0.08, 1, 1])
-    for ext in ["png", "svg"]:
-        fig.savefig(os.path.join(OUTPUT_DIR, f"fig3_budget_curves.{ext}"), bbox_inches="tight")
-    plt.close()
-    print("Figure 3 saved.")
+# ---------------------------------------------------------------- Figure S1
+def figure_s1():
+    s20 = summ[summ.budget_M == 20].set_index("scenario")
+    fig, ax = plt.subplots(figsize=(120 * MM, 95 * MM))
+    offsets = {"Balanced": (-8, 8), "Conservation priority": (8, -2), "T&E emphasis": (8, -2),
+               "Habitat emphasis": (8, -10), "Community priority": (-10, 8),
+               "Rancher-conservation": (8, -9), "Hunter-recreationist": (-10, -12)}
+    for s in ORDER:
+        lab, col, mk, _ = SCEN[s]
+        x, y = s20.loc[s, "rancher_score"], s20.loc[s, "te_score"]
+        ax.scatter(x, y, s=48, color=col, marker=mk, edgecolor="#262626", linewidth=0.5, zorder=3)
+    labels = {  # direct labels; the two identical conservation portfolios share one
+        "Balanced": "Balanced", "Conservation priority": "Conservation Priority\n= T&E Emphasis",
+        "Habitat emphasis": "Habitat Emphasis", "Community priority": "Community Priority",
+        "Rancher-conservation": "Rancher-Conservation", "Hunter-recreationist": "Hunter-Recreationist"}
+    for s, t in labels.items():
+        x, y = s20.loc[s, "rancher_score"], s20.loc[s, "te_score"]
+        dx, dy = offsets[s]
+        ax.annotate(t, (x, y), xytext=(dx, dy), textcoords="offset points", fontsize=7,
+                    ha="left" if dx > 0 else "right", va="center", color="#262626")
+    bx, by = s20.loc["Balanced", ["rancher_score", "te_score"]]
+    ax.axvline(bx, color="#bdbdbd", linewidth=0.6, linestyle=":")
+    ax.axhline(by, color="#bdbdbd", linewidth=0.6, linestyle=":")
+    ax.set_xlabel("Total rancher score at $20 million")
+    ax.set_ylabel("Total T&E plant score at $20 million")
+    ax.set_xlim(2, 19); ax.set_ylim(1, 12.5)
+    save(fig, "Figure_S1_tradeoff_scatter")
 
 
-def fig4_heatmap():
-    df   = pd.read_csv(os.path.join(INPUT_DIR, "sdm_results_paddock_detail.csv"))
-    df20 = df[df["budget"] == 20_000_000].copy()
-    n_scen = len(SCENARIO_ORDER); n_paddocks = 22
-    matrix = np.zeros((n_scen, n_paddocks), dtype=int)
-    for si, scen in enumerate(SCENARIO_ORDER):
-        sub = df20[df20["scenario"] == scen].sort_values("paddock")
-        for _, row in sub.iterrows():
-            matrix[si, int(row["paddock"]) - 1] = int(row["alternative"])
-
-    alt_nums = sorted(ALT_COLORS.keys())
-    cmap = ListedColormap([ALT_COLORS[a] for a in alt_nums])
-    bounds = [a - 0.5 for a in alt_nums] + [alt_nums[-1] + 0.5]
-    norm = BoundaryNorm(bounds, cmap.N)
-
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.imshow(matrix, cmap=cmap, norm=norm, aspect="auto", interpolation="nearest")
-    ax.set_xticks(range(n_paddocks))
-    ax.set_xticklabels([str(i+1) for i in range(n_paddocks)], fontsize=8)
-    ax.set_xlabel("Paddock")
-    ax.set_yticks(range(n_scen)); ax.set_yticklabels(SCENARIO_ORDER, fontsize=8)
-    for si in range(n_scen):
-        for pi in range(n_paddocks):
-            alt = matrix[si, pi]
-            color = "white" if alt in [3, 5, 6, 7] else "black"
-            ax.text(pi, si, str(alt), ha="center", va="center",
-                    fontsize=6.5, fontweight="bold", color=color)
-    used_alts = sorted(set(matrix.flatten()))
-    patches = [mpatches.Patch(color=ALT_COLORS[a], label=f"Alt {a}: {ALT_SHORT[a]}")
-               for a in used_alts]
-    ax.legend(handles=patches, loc="upper center", bbox_to_anchor=(0.5, -0.12),
-              ncol=4, frameon=False, fontsize=7.5)
-    ax.set_title("Figure 4. Management portfolios at $20 million under seven weighting scenarios",
-                 fontsize=11, fontweight="bold", pad=12)
-    plt.tight_layout()
-    for ext in ["png", "svg"]:
-        fig.savefig(os.path.join(OUTPUT_DIR, f"fig4_heatmap.{ext}"), bbox_inches="tight")
-    plt.close()
-    print("Figure 4 saved.")
-
-
-def figS2_tradeoff():
-    df   = pd.read_csv(os.path.join(INPUT_DIR, "sdm_results_summary.csv"))
-    df20 = df[df["budget"] == 20_000_000].copy()
-
-    bal        = df20[df20["scenario"] == "Balanced"].iloc[0]
-    rc         = df20[df20["scenario"] == "Rancher-conservation"].iloc[0]
-    ranch_gain = rc["rancher_score"] - bal["rancher_score"]
-    te_loss    = bal["te_score"]     - rc["te_score"]
-    ratio      = ranch_gain / te_loss if te_loss != 0 else float("inf")
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    for _, row in df20.iterrows():
-        scen = row["scenario"]
-        ax.scatter(row["rancher_score"], row["te_score"],
-                   s=120, color=SCENARIO_COLORS.get(scen, "gray"),
-                   edgecolors="black", linewidth=0.8, zorder=5)
-
-    label_cfg = {
-        "Conservation priority": dict(
-            xytext=(-60, 28), ha="right",
-            arrowprops=dict(arrowstyle="-", color=SCENARIO_COLORS["Conservation priority"], lw=0.7)
-        ),
-        "T&E emphasis": dict(
-            xytext=(-60,  8), ha="right",
-            arrowprops=dict(arrowstyle="-", color=SCENARIO_COLORS["T&E emphasis"], lw=0.7)
-        ),
-        "Habitat emphasis": dict(
-            xytext=(-60, -12), ha="right",
-            arrowprops=dict(arrowstyle="-", color=SCENARIO_COLORS["Habitat emphasis"], lw=0.7)
-        ),
-        "Community priority": dict(
-            xytext=(-14, 20), ha="right",
-            arrowprops=dict(arrowstyle="-", color=SCENARIO_COLORS["Community priority"], lw=0.7)
-        ),
-        "Rancher-conservation": dict(
-            xytext=(12, -22), ha="left",
-            arrowprops=dict(arrowstyle="-", color=SCENARIO_COLORS["Rancher-conservation"], lw=0.7)
-        ),
-        "Balanced": dict(
-            xytext=(12, 16), ha="left",
-            arrowprops=dict(arrowstyle="-", color=SCENARIO_COLORS["Balanced"], lw=0.7)
-        ),
-        "Hunter-recreationist": dict(
-            xytext=(12, -22), ha="left",
-            arrowprops=dict(arrowstyle="-", color=SCENARIO_COLORS["Hunter-recreationist"], lw=0.7)
-        ),
-    }
-
-    for _, row in df20.iterrows():
-        scen = row["scenario"]
-        cfg  = label_cfg.get(scen, dict(xytext=(10, 10), ha="left", arrowprops=None))
-        ax.annotate(
-            scen,
-            xy=(row["rancher_score"], row["te_score"]),
-            xytext=cfg["xytext"],
-            textcoords="offset points",
-            fontsize=7.5, ha=cfg["ha"],
-            color=SCENARIO_COLORS.get(scen, "gray"),
-            arrowprops=cfg["arrowprops"],
-        )
-
-    ax.axhline(bal["te_score"],      color="gray", linestyle=":", linewidth=0.5, alpha=0.5)
-    ax.axvline(bal["rancher_score"], color="gray", linestyle=":", linewidth=0.5, alpha=0.5)
-    ax.text(0.98, 0.48,
-            f"Rancher-Conservation\n{ratio:.2f}:1 exchange ratio",
-            transform=ax.transAxes, fontsize=7.5, color="#F57C00",
-            ha="right", va="center", style="italic")
-    ax.text(0.02, 0.88, "More conservation,\nless rancher",
-            transform=ax.transAxes, fontsize=7, color="gray",
-            va="top", ha="left", style="italic")
-    ax.text(0.98, 0.13, "More rancher,\nless conservation",
-            transform=ax.transAxes, fontsize=7, color="gray",
-            va="bottom", ha="right", style="italic")
-
-    ax.set_xlabel("Total rancher score (sum across 22 paddocks)")
-    ax.set_ylabel("Total T&E score (sum across 22 paddocks)")
-    ax.set_title("Figure S2. Conservation-rancher tradeoff at $20 million",
-                 fontsize=11, fontweight="bold")
-    plt.tight_layout()
-    for ext in ["png", "svg"]:
-        fig.savefig(os.path.join(OUTPUT_DIR, f"figS2_tradeoff.{ext}"),
-                    bbox_inches="tight")
-    plt.close()
-    print("Figure S2 saved.")
-
-
-def figS3_restoration_progression():
-    df    = pd.read_csv(os.path.join(INPUT_DIR, "sdm_results_paddock_detail.csv"))
-    df_cp = df[df["scenario"] == "Conservation priority"].copy()
-    budgets = [5_000_000, 10_000_000, 20_000_000, 40_000_000, 60_000_000]
-    budget_labels = ["$5M", "$10M", "$20M", "$40M", "$60M"]
-
-    def categorize(alt):
-        if alt == 7:             return "Full restoration"
-        elif alt in [4, 5, 6]:  return "Conservation (mid)"
-        elif alt == 1:           return "Fence + fuelbreaks"
-        elif alt == 2:           return "Fuelbreak only"
-        elif alt == 3:           return "Grazing intensification"
-        else:                    return "Other"
-
-    cat_colors = {
-        "Full restoration": "#004D40", "Conservation (mid)": "#2E7D32",
-        "Fence + fuelbreaks": "#4CAF50", "Fuelbreak only": "#BBDEFB",
-        "Grazing intensification": "#F44336", "Other": "#ECEFF1",
-    }
-    cat_order = ["Full restoration", "Conservation (mid)", "Fence + fuelbreaks",
-                 "Fuelbreak only", "Grazing intensification", "Other"]
-
-    counts_per_budget = []
-    for budget in budgets:
-        sub = df_cp[df_cp["budget"] == budget]
-        cc  = {c: 0 for c in cat_order}
-        for alt in sub["alternative"]: cc[categorize(alt)] += 1
-        counts_per_budget.append(cc)
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    x = np.arange(len(budgets)); bottoms = np.zeros(len(budgets))
-    for cat in cat_order:
-        vals = [counts_per_budget[i][cat] for i in range(len(budgets))]
-        if sum(vals) == 0: continue
-        ax.bar(x, vals, bottom=bottoms, width=0.6, color=cat_colors[cat],
-               label=cat, edgecolor="white", linewidth=0.5)
+# ---------------------------------------------------------------- Figure S2
+def figure_s2():
+    cp = det[det.scenario == "Conservation priority"]
+    cats = [("Full restoration (Alt 7)", [7], "#08306b", "white"),
+            ("Fencing with cattle or ungulate removal (Alts 4 to 6)", [4, 5, 6], "#4292c6", "white"),
+            ("No change or other", None, "#e6e6e6", "#1a1a1a")]
+    fig, ax = plt.subplots(figsize=(120 * MM, 75 * MM))
+    bottom = np.zeros(len(BUDGETS))
+    for lab, alts, col, tc in cats:
+        vals = []
+        for b in BUDGETS:
+            a = cp[cp.budget_M == b].alternative
+            vals.append(int(a.isin(alts).sum()) if alts else int((~a.isin([4, 5, 6, 7])).sum()))
+        vals = np.array(vals)
+        ax.bar(range(len(BUDGETS)), vals, 0.62, bottom=bottom, color=col, label=lab,
+               edgecolor="white", linewidth=1)
         for i, v in enumerate(vals):
-            if v > 0:
-                txt_color = "white" if cat in ["Full restoration", "Conservation (mid)"] else "black"
-                ax.text(x[i], bottoms[i] + v/2, str(v), ha="center", va="center",
-                        fontsize=8, fontweight="bold", color=txt_color)
-        bottoms += np.array(vals, dtype=float)
+            if v:
+                ax.text(i, bottom[i] + v / 2, str(v), ha="center", va="center", color=tc,
+                        fontsize=7, fontweight="bold")
+        bottom += vals
+    ax.set_xticks(range(len(BUDGETS)), [f"${b}M" for b in BUDGETS])
+    ax.set_xlabel("Budget")
+    ax.set_ylabel("Paddocks under Conservation Priority")
+    ax.set_ylim(0, 22.5)
+    ax.set_yticks([0, 5, 10, 15, 20, 22])
+    ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(0, 1.2), ncol=1)
+    save(fig, "Figure_S2_restoration_progression")
 
-    ax.set_xticks(x); ax.set_xticklabels(budget_labels)
-    ax.set_xlabel("Budget"); ax.set_ylabel("Number of paddocks")
-    ax.set_ylim(0, 23)
-    ax.axhline(22, color="gray", linestyle=":", linewidth=0.5, alpha=0.5)
-    ax.text(4.3, 22.3, "22 paddocks", fontsize=7, color="gray", ha="right")
-    ax.legend(frameon=False, fontsize=8, loc="upper left")
-    ax.set_title("Figure S3. Progressive landscape restoration under Conservation Priority",
-                 fontsize=11, fontweight="bold")
-    plt.tight_layout()
-    for ext in ["png", "svg"]:
-        fig.savefig(os.path.join(OUTPUT_DIR, f"figS3_restoration.{ext}"), bbox_inches="tight")
-    plt.close()
-    print("Figure S3 saved.")
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Generate the main-text and supporting figures.")
-    parser.add_argument("--data-dir", default=".", help="Directory containing input CSV files.")
-    parser.add_argument("--out-dir",  default=".", help="Directory to write output figures.")
-    args = parser.parse_args()
-    set_dirs(Path(args.data_dir), Path(args.out_dir))
-    Path(args.out_dir).mkdir(parents=True, exist_ok=True)
-    fig2_asymmetry()
-    fig3_budget_curves()
-    fig4_heatmap()
-    figS2_tradeoff()
-    figS3_restoration_progression()
-    print("\nAll figures generated.")
 
 if __name__ == "__main__":
-    main()
+    figure3(); figure4(); figure5(); figure_s1(); figure_s2()

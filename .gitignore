@@ -17,8 +17,8 @@ results/*.csv
 !results/sdm_results_paddock_detail.csv
 !results/sdm_scenario_definitions.csv
 !results/table1.csv
-!results/table2.csv
-!results/table3.csv
+!results/tableS1_scenario_weights.csv
+!results/tableS3_efficiency_20M.csv
 
 # OS
 .DS_Store

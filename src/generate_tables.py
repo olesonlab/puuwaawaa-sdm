@@ -1,7 +1,9 @@
 """
 generate_tables.py
 =========================
-Generates Tables 1, 2, and 3 for the Puʻuwaʻawaʻa SDM paper.
+Generates Table 1 and Appendix S1 Tables S1 and S3 for the Puʻuwaʻawaʻa SDM paper.
+The other Appendix S1 tables come from src/sensitivity/pww_sensitivity_analysis.py
+(Tables S2 and S4 to S7) and from the puuwaawaa-normalization repository (S8 to S10).
 
 Inputs (expected in the same directory, or pass --data-dir):
   - sdm_results_summary.csv       (from pww_sdm_optimizer.py)
@@ -10,9 +12,9 @@ Inputs (expected in the same directory, or pass --data-dir):
   - pww_sdm_input_data.xlsx       (costs read from paddock_data sheet)
 
 Outputs (written to --out-dir, default = current directory):
-  - table1.csv   Management alternatives with costs and scores
-  - table2.csv   Scenario weight definitions
-  - table3.csv   Efficiency comparison at $20M budget
+  - table1.csv                  Table 1, management alternatives with costs and scores
+  - tableS1_scenario_weights.csv  Table S1, scenario weight definitions
+  - tableS3_efficiency_20M.csv    Table S3, score changes and exchange ratios at $20M
 
 Usage:
   python generate_tables.py
@@ -24,6 +26,14 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
+
+
+SCENARIO_TITLES = {
+    "Balanced": "Balanced", "Conservation priority": "Conservation Priority",
+    "T&E emphasis": "T&E Emphasis", "Habitat emphasis": "Habitat Emphasis",
+    "Community priority": "Community Priority", "Rancher-conservation": "Rancher-Conservation",
+    "Hunter-recreationist": "Hunter-Recreationist",
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -87,12 +97,12 @@ def build_table1(data_dir: Path) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Table 2 – Scenario weight definitions
+# Table S1 – Scenario weight definitions
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_table2(data_dir: Path) -> pd.DataFrame:
     """
-    Table 2: Scenario weight definitions.
+    Table S1: Scenario weight definitions.
     Effective weight on each sub-objective equals the product of its
     fundamental objective weight and its within-group share.
     All numeric columns rounded to 3 decimal places.
@@ -108,42 +118,36 @@ def build_table2(data_dir: Path) -> pd.DataFrame:
     ]
     for col in ["Eco wt", "Soc wt", "w(T&E)", "w(Hab)", "w(Ranch)", "w(Hunt)", "w(Rec)"]:
         t2[col] = t2[col].round(3)
+    t2["Scenario"] = t2["Scenario"].map(SCENARIO_TITLES).fillna(t2["Scenario"])
     return t2.reset_index(drop=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Table 3 – Efficiency comparison at $20M
+# Table S3 – Efficiency comparison at $20M
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_table3(data_dir: Path) -> pd.DataFrame:
     """
-    Table 3: Comparative efficiency and performance of management scenarios
-    at the $20 million budget. Scores are relative to the Balanced baseline.
-
-    Efficiency Ratio = Rancher Score Gain / T&E Score Loss.
-    T&E Score Loss is displayed as a positive number (magnitude of loss).
+    Table S3: change in each sub-objective score relative to Balanced (S1) at the
+    $20 million budget, with rancher and hunter points gained per T&E point lost.
+    The ratios are left blank where a scenario gives up no T&E score.
     """
     summ = pd.read_csv(data_dir / "sdm_results_summary.csv")
-    budget = 20_000_000
-    bal = summ[(summ["budget"] == budget) & (summ["scenario"] == "Balanced")].iloc[0]
-
-    scenario_ids = [
-        ("Rancher-conservation", "S6"),
-        ("Community priority",   "S5"),
-        ("Hunter-recreationist", "S7"),
-    ]
+    summ = summ[summ["budget"] == 20_000_000]
+    bal = summ[summ["scenario"] == "Balanced"].iloc[0]
+    cols = [("te_score", "Change in T&E"), ("habitat_score", "Change in habitat"),
+            ("rancher_score", "Change in rancher"), ("hunter_score", "Change in hunter"),
+            ("recreationist_score", "Change in recreationist")]
     rows = []
-    for scenario, sid in scenario_ids:
-        row = summ[(summ["budget"] == budget) & (summ["scenario"] == scenario)].iloc[0]
-        ranch_gain = row.rancher_score - bal.rancher_score
-        te_loss    = bal.te_score - row.te_score          # positive = Balanced had more T&E
-        ratio      = ranch_gain / te_loss if te_loss != 0 else float("inf")
-        rows.append({
-            "Scenario":                              f"{sid}: {scenario}",
-            "Rancher Score Gain":                    f"{ranch_gain:+.2f}",
-            "T&E Score Loss":                        f"{te_loss:.2f}",   # positive magnitude
-            "Efficiency Ratio (Rancher : T&E Lost)": f"{ratio:.2f} : 1",
-        })
+    for k, (scenario, row) in enumerate(summ.set_index("scenario").loc[list(SCENARIO_TITLES)].iterrows(), 1):
+        out = {"Scenario": f"{SCENARIO_TITLES[scenario]} (S{k})"}
+        for c, lab in cols:
+            out[lab] = round(row[c] - bal[c], 2)
+        te_loss = bal.te_score - row.te_score
+        lost = te_loss > 1e-9
+        out["Rancher pts per T&E pt lost"] = round((row.rancher_score - bal.rancher_score) / te_loss, 2) if lost else None
+        out["Hunter pts per T&E pt lost"] = round((row.hunter_score - bal.hunter_score) / te_loss, 2) if lost else None
+        rows.append(out)
     return pd.DataFrame(rows)
 
 
@@ -153,7 +157,7 @@ def build_table3(data_dir: Path) -> pd.DataFrame:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate Tables 1, 2, 3 for the Puʻuwaʻawaʻa SDM paper."
+        description="Generate Table 1 and Tables S1 and S3 for the Puʻuwaʻawaʻa SDM paper."
     )
     parser.add_argument("--data-dir", default=".",
                         help="Directory containing input CSV/XLSX files.")
@@ -170,14 +174,14 @@ def main():
     t1.to_csv(out_dir / "table1.csv", index=False)
     print(t1.to_string(index=False))
 
-    print("\nBuilding Table 2 (scenario weight definitions)...")
+    print("\nBuilding Table S1 (scenario weight definitions)...")
     t2 = build_table2(data_dir)
-    t2.to_csv(out_dir / "table2.csv", index=False)
+    t2.to_csv(out_dir / "tableS1_scenario_weights.csv", index=False)
     print(t2.to_string(index=False))
 
-    print("\nBuilding Table 3 (efficiency comparison at $20M)...")
+    print("\nBuilding Table S3 (efficiency comparison at $20M)...")
     t3 = build_table3(data_dir)
-    t3.to_csv(out_dir / "table3.csv", index=False)
+    t3.to_csv(out_dir / "tableS3_efficiency_20M.csv", index=False)
     print(t3.to_string(index=False))
 
     print(f"\nDone. CSVs written to: {out_dir.resolve()}")
