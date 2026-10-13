@@ -8,8 +8,8 @@ the captions carry them. Scenario names and colors match the SI sensitivity figu
 
     python src/figures.py --data-dir results --out-dir figures
 
-Figure 1 (map and photographs) is assembled by figure1_composite.py and Figure 2
-(objectives hierarchy) was drawn by hand, so neither is produced here.
+Figure 1 (map and photographs) was produced in GIS and Figure 2 (objectives
+hierarchy) was drawn by hand, so neither is produced here.
 """
 import argparse
 import os

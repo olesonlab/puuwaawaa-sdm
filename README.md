@@ -44,7 +44,6 @@ puuwaawaa-sdm/
 ├── src/
 │   ├── pww_sdm_optimizer.py   # Integer program (PuLP/CBC)
 │   ├── figures.py             # Figures 3, 4, 5 and S1, S2
-│   ├── figure1_composite.py   # Figure 1 (map and photographs; inputs not included)
 │   ├── generate_tables.py     # Table 1 and Tables S1, S3
 │   └── sensitivity/
 │       ├── pww_sensitivity_analysis.py   # Figures S3-S9, Tables S2, S4-S7
@@ -96,7 +95,9 @@ python src/generate_tables.py --data-dir results --out-dir results
 `generate_tables.py` reads costs from the `paddock_data` sheet, so it needs the
 workbook in the same directory as the result CSVs.
 
-Figure 2, the objectives hierarchy, was drawn by hand and has no script. The
+Figure 1, the study-area map with three field photographs, was produced in GIS and
+is not generated here. Figure 2, the objectives hierarchy, was drawn by hand and
+has no script. The
 normalization comparison in Appendix S1 (Figures S10 and S11, Tables S8 to S10)
 is produced in the
 [puuwaawaa-normalization](https://github.com/olesonlab/puuwaawaa-normalization)
@@ -104,7 +105,6 @@ repository.
 
 | Paper item | Script | Output |
 | --- | --- | --- |
-| Figure 1 | `src/figure1_composite.py` | `Figure_1_map_photos` |
 | Figures 3 to 5, S1, S2 | `src/figures.py` | `Figure_3_asymmetry` and so on |
 | Table 1 | `src/generate_tables.py` | `results/table1.csv` |
 | Table S1 | `src/generate_tables.py` | `results/tableS1_scenario_weights.csv` |
