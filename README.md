@@ -7,18 +7,16 @@ Code and data for:
 > and community objectives at Puʻuwaʻawaʻa Forest Reserve, Hawaiʻi"**
 > *Conservation Science and Practice* (CSP2-26-0352, in revision)
 
-A companion paper on normalization methods is at
-[github.com/olesonlab/puuwaawaa-normalization](https://github.com/olesonlab/puuwaawaa-normalization).
-
 ---
 
 ## Overview
 
 An integer program evaluates management alternatives across 22 paddocks at
 Puʻuwaʻawaʻa Forest Reserve under seven weighting scenarios and five
-budget levels ($5M to $60M). Scores are normalized within each paddock, which
-keeps spatial priority separate from action effectiveness. The companion paper
-explains why that choice matters.
+budget levels ($5M to $60M). Conservation scores are normalized within each
+paddock and community scores across all paddocks and alternatives. Appendix S1
+compares the within-paddock conservation scores with global linear and vector
+scaling (`src/normalization/`).
 
 The roadside fuelbreak is a single landscape decision rather than a paddock-level
 alternative. It is built once for the reserve or not at all, charged once at
@@ -48,6 +46,7 @@ puuwaawaa-sdm/
 │   ├── sensitivity/
 │   │   ├── pww_sensitivity_analysis.py   # Figures S3-S9, Tables S2, S4-S7
 │   │   └── test_parity.py                # Guards the two model copies
+│   ├── normalization/                    # Normalization comparison, Figures S10, S11, Tables S8-S10
 │   └── paddock9/                         # Paddock 9 structural sensitivity, Tables S11, S12
 ├── data/
 │   ├── pww_sdm_input_data.xlsx
@@ -98,11 +97,7 @@ workbook in the same directory as the result CSVs.
 
 Figure 1, the study-area map with three field photographs, was produced in GIS and
 is not generated here. Figure 2, the objectives hierarchy, was drawn by hand and
-has no script. The
-normalization comparison in Appendix S1 (Figures S10 and S11, Tables S8 to S10)
-is produced in the
-[puuwaawaa-normalization](https://github.com/olesonlab/puuwaawaa-normalization)
-repository.
+has no script.
 
 | Paper item | Script | Output |
 | --- | --- | --- |
@@ -111,6 +106,7 @@ repository.
 | Table S1 | `src/generate_tables.py` | `results/tableS1_scenario_weights.csv` |
 | Table S3 | `src/generate_tables.py` | `results/tableS3_efficiency_20M.csv` |
 | Figures S3 to S9, Tables S2, S4 to S7 | `src/sensitivity/pww_sensitivity_analysis.py` | see `src/sensitivity/README.md` |
+| Normalization comparison, Figures S10 and S11, Tables S8 to S10 | `src/normalization/` | see `src/normalization/README.md` |
 | Paddock 9 structural sensitivity, Tables S11 and S12 | `src/paddock9/` | see `src/paddock9/README.md` |
 
 Sensitivity, fire-feedback and landscape-action analyses live in
@@ -124,6 +120,13 @@ changes if Paddock 9 competes like any other paddock instead of being fixed to
 full restoration, under three specifications of conservation value and budgets
 from $0.5M to $60M. Its scripts import `src/pww_sdm_optimizer.py` rather than
 keeping their own copy of the model. See `src/paddock9/README.md`.
+
+The normalization comparison in Appendix S1 lives in `src/normalization/`. It
+reruns the seven scenarios at five budgets with the conservation objectives
+scaled within each paddock, globally (min-max over all paddocks and
+alternatives) or by the vector norm, and crosses within-paddock and global
+scaling of the conservation and community objectives. It also imports
+`src/pww_sdm_optimizer.py`. See `src/normalization/README.md`.
 
 ---
 
