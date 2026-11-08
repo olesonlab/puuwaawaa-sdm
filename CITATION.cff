@@ -6,6 +6,8 @@ abstract: >-
   and fire-feedback analyses for a structured decision making study of 11
   management alternatives across 22 paddocks at Puʻuwaʻawaʻa Forest Reserve,
   Hawaiʻi, under seven weighting scenarios and five budget levels.
+  Includes a Paddock 9 structural sensitivity that frees the fixed
+  restoration commitment under three specifications of conservation value.
 type: software
 license: MIT
 repository-code: "https://github.com/olesonlab/puuwaawaa-sdm"

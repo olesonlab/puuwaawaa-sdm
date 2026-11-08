@@ -45,9 +45,10 @@ puuwaawaa-sdm/
 │   ├── pww_sdm_optimizer.py   # Integer program (PuLP/CBC)
 │   ├── figures.py             # Figures 3, 4, 5 and S1, S2
 │   ├── generate_tables.py     # Table 1 and Tables S1, S3
-│   └── sensitivity/
-│       ├── pww_sensitivity_analysis.py   # Figures S3-S9, Tables S2, S4-S7
-│       └── test_parity.py                # Guards the two model copies
+│   ├── sensitivity/
+│   │   ├── pww_sensitivity_analysis.py   # Figures S3-S9, Tables S2, S4-S7
+│   │   └── test_parity.py                # Guards the two model copies
+│   └── paddock9/                         # Paddock 9 structural sensitivity, Tables S11, S12
 ├── data/
 │   ├── pww_sdm_input_data.xlsx
 │   └── README_data.md
@@ -110,12 +111,19 @@ repository.
 | Table S1 | `src/generate_tables.py` | `results/tableS1_scenario_weights.csv` |
 | Table S3 | `src/generate_tables.py` | `results/tableS3_efficiency_20M.csv` |
 | Figures S3 to S9, Tables S2, S4 to S7 | `src/sensitivity/pww_sensitivity_analysis.py` | see `src/sensitivity/README.md` |
+| Paddock 9 structural sensitivity, Tables S11 and S12 | `src/paddock9/` | see `src/paddock9/README.md` |
 
 Sensitivity, fire-feedback and landscape-action analyses live in
 `src/sensitivity/`. See `src/sensitivity/README.md` for the stages, runtimes and
 outputs. That directory keeps a second copy of the model so every elicited input
 can be swept; `test_parity.py` checks the two copies still agree and should be
 run after changing either.
+
+The Paddock 9 structural sensitivity lives in `src/paddock9/`. It asks what
+changes if Paddock 9 competes like any other paddock instead of being fixed to
+full restoration, under three specifications of conservation value and budgets
+from $0.5M to $60M. Its scripts import `src/pww_sdm_optimizer.py` rather than
+keeping their own copy of the model. See `src/paddock9/README.md`.
 
 ---
 
@@ -133,8 +141,10 @@ committed copy is byte-identical to the archived one.
 
 ## Dependencies
 
-Python 3.9 or later, with numpy, pandas, matplotlib, and pulp. PuLP installs the
-CBC solver on most platforms. `requirements.txt` pins versions.
+Python 3.9 or later, with numpy, pandas, matplotlib, pulp, and scipy. PuLP installs the
+CBC solver on most platforms. PuLP is pinned at 2.9.0 because the code imports
+`LpStatus`, which PuLP 4 removed. SciPy 1.9 or later provides the HiGHS `milp`
+solver used in `src/paddock9/`.
 
 ---
 
