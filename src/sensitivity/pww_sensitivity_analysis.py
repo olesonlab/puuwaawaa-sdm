@@ -4,7 +4,7 @@ Puʻuwaʻawaʻa SDM: sensitivity analysis of the fire management portfolio model
 The portfolio model selects one management alternative for each of 22 paddocks
 in Puʻuwaʻawaʻa Forest Reserve to maximize a weighted sum of normalized
 sub-objective scores under a budget constraint. Conservation scores are
-normalized within paddocks, community scores globally. Paddock 9 is pre-assigned
+normalized within paddocks, community scores criterion-wide. Paddock 9 is pre-assigned
 to full restoration and excluded from the optimization. The roadside fuelbreak
 is a single landscape decision rather than a paddock-level alternative: every
 scenario and budget is solved with and without it, and the better solution is
@@ -249,7 +249,7 @@ def build_scores(d, p, roadside_built=False):
     Conservation effectiveness combines the elicited direct benefit with the
     spatially varying fire risk reduction, rescaled to the same range, then is
     normalized within each paddock so the best alternative scores 1 and the
-    worst 0. Community scores are normalized globally by min-max.
+    worst 0. Community scores are normalized criterion-wide by min-max.
 
     Scores cover the ten paddock-level alternatives, in PADDOCK_ALTS order.
 

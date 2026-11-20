@@ -6,7 +6,7 @@ Writes, to this folder:
   appendix_normalization_portfolios.csv
                                      portfolios for every scenario and budget under
                                      each conservation normalization, community scores
-                                     global linear (Table S9, Figure S11)
+                                     criterion-wide (Table S9, Figure S11)
   normalization_symmetry.csv         $20M exchange ratios for four crossed pairings
                                      of conservation and community normalization
                                      (Table S10)

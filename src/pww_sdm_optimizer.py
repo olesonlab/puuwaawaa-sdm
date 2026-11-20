@@ -19,13 +19,18 @@ allocates the remaining budget across the other 21 paddocks.
 
 Scoring approach:
     Conservation sub-objectives use within-paddock normalization: for each paddock,
-    the best alternative scores 1.0 and worst scores 0.0. This separates "what to
-    do" (action effectiveness, scored per paddock) from "where to invest" (handled
-    by the budget constraint). Paddocks with zero T&E plants receive zero T&E
-    scores; all paddocks contribute to the habitat objective.
+    the best alternative scores 1.0 and worst scores 0.0. Because a paddock's T&E
+    count and native cover multiply every alternative in that paddock, they cancel,
+    so the score measures relative action effectiveness, not the number of plants
+    or amount of cover affected. The budget constraint does not restore that
+    abundance weighting. This is a value choice: it values improvement in every
+    occupied paddock equally. Paddocks with zero T&E plants receive zero T&E
+    scores; all paddocks contribute to the habitat objective. Appendix S1 and
+    src/normalization/ compare it with criterion-wide and vector scaling.
 
-    Community sub-objectives use global min-max normalization of raw scores
-    (base score x elevation-zone multiplier).
+    Community sub-objectives use criterion-wide min-max normalization of raw scores
+    (base score x elevation-zone multiplier) over the 21 optimized paddocks and
+    their alternatives.
 
     All scores are on [0, 1] before weighting (Edwards & Barron 1994).
 
@@ -199,9 +204,10 @@ def normalize_within_paddock(scores):
     """
     Normalize each paddock's scores so best alternative = 1.0, worst = 0.0.
 
-    This separates action effectiveness (scored here) from spatial priority
-    (handled by the budget constraint in the optimizer). Each paddock
-    contributes equally to the sub-objective when weights are applied.
+    Abundance that multiplies every alternative in a paddock cancels, so each
+    occupied paddock spans the same score range and contributes equally to the
+    sub-objective when weights are applied. The budget constraint does not
+    restore the abundance weighting this removes.
     """
     out = np.zeros_like(scores)
     for i in range(scores.shape[0]):
@@ -269,7 +275,7 @@ def prepare_scores(input_data, roadside_built):
     T&E scores zeroed for paddocks with no T&E plants. All paddocks contribute
     to the habitat objective.
 
-    Community scores: global min-max normalization of raw scores.
+    Community scores: criterion-wide min-max normalization of raw scores.
 
     Only the ten paddock-level alternatives are scored; columns follow
     PADDOCK_ALTS order.
@@ -302,7 +308,7 @@ def prepare_scores(input_data, roadside_built):
     # Habitat scores: all paddocks contribute (all have some native cover)
     habitat_scores = action_within.copy()
 
-    # Community scores: global min-max on the 21-paddock subset
+    # Community scores: criterion-wide min-max on the 21-paddock subset
     scores = {
         "te": te_scores,
         "habitat": habitat_scores,

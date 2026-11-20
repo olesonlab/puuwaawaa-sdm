@@ -1,12 +1,12 @@
 # Normalization comparison (Appendix S1)
 
-The main analysis scales the two conservation objectives within each paddock and the three community objectives globally. Appendix S1 documents how portfolios change under two other specifications of the conservation scores, and when the conservation and community scalings are crossed. These are alternative specifications of conservation value, not a correct method and incorrect ones.
+The main analysis scales the two conservation objectives within each paddock and the three community objectives criterion-wide. Appendix S1 documents how portfolios change under two other specifications of the conservation scores, and when the conservation and community scalings are crossed. These are alternative specifications of conservation value, not a correct method and incorrect ones.
 
-- **Within-unit** (main analysis): action effectiveness rescaled to [0, 1] within each paddock; T&E scores are 0 where no T&E plants are recorded.
-- **Global linear**: action effectiveness times the paddock's T&E count (or native cover), min-max rescaled over all 21 optimized paddocks and 10 paddock-level alternatives.
+- **Within-paddock** (main analysis; key `within_unit` in the code): action effectiveness rescaled to [0, 1] within each paddock; T&E scores are 0 where no T&E plants are recorded.
+- **Criterion-wide** (key `global_linear` in the code): action effectiveness times the paddock's T&E count (or native cover), min-max rescaled over all 21 optimized paddocks and 10 paddock-level alternatives.
 - **Vector**: the same products divided by the Euclidean norm of the whole matrix.
 
-"Global" here means the minimum and maximum are taken over the options in the model, not over a range set outside it.
+Criterion-wide min-max is a local scale in Monat's (2009) sense: its endpoints come from the options in the model, not from a range set outside it. Versions up to 1.3.0 called it "global linear"; the code keys keep that name so earlier result files still read.
 
 ## Files
 
@@ -23,7 +23,7 @@ python src/normalization/appendix_s1_figures.py
 
 The three run CSVs are committed, so the figures and tables reproduce without the solver.
 
-With within-unit conservation scores and global community scores, `norm_model.prepare_scores_method` returns the same scores as `pww_sdm_optimizer.prepare_scores`, and the first row of Table S10 reproduces the main analysis: asymmetry ratio 1.7528, and 3.3132, 0.5851 and 0.4042 rancher or hunter points per T&E point lost for S6, S5 and S7.
+With within-paddock conservation scores and criterion-wide community scores, `norm_model.prepare_scores_method` returns the same scores as `pww_sdm_optimizer.prepare_scores`, and the first row of Table S10 reproduces the main analysis: asymmetry ratio 1.7528, and 3.3132, 0.5851 and 0.4042 rancher or hunter points per T&E point lost for S6, S5 and S7.
 
 ## Provenance
 

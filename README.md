@@ -15,7 +15,7 @@ An integer program evaluates management alternatives across 22 paddocks at
 Puʻuwaʻawaʻa Forest Reserve under seven weighting scenarios and five
 budget levels ($5M to $60M). Conservation scores are normalized within each
 paddock and community scores across all paddocks and alternatives. Appendix S1
-compares the within-paddock conservation scores with global linear and vector
+compares the within-paddock conservation scores with criterion-wide and vector
 scaling (`src/normalization/`).
 
 The roadside fuelbreak is a single landscape decision rather than a paddock-level
@@ -123,9 +123,9 @@ keeping their own copy of the model. See `src/paddock9/README.md`.
 
 The normalization comparison in Appendix S1 lives in `src/normalization/`. It
 reruns the seven scenarios at five budgets with the conservation objectives
-scaled within each paddock, globally (min-max over all paddocks and
-alternatives) or by the vector norm, and crosses within-paddock and global
-scaling of the conservation and community objectives. It also imports
+scaled within each paddock, criterion-wide (min-max over all optimized
+paddocks and alternatives) or by the vector norm, and crosses within-paddock and
+criterion-wide scaling of the conservation and community objectives. It also imports
 `src/pww_sdm_optimizer.py`. See `src/normalization/README.md`.
 
 ---

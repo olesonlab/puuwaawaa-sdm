@@ -5,14 +5,15 @@ and the integer program all come from src/pww_sdm_optimizer.py, so the compariso
 uses the same model as the main analysis. Three additions:
 
 - normalize_vector, the third conservation scaling compared in Appendix S1;
-- prepare_scores_method, which builds the conservation scores under within-unit,
-  global linear or vector normalization and the community scores under within-unit
-  or global linear normalization, so the two choices can be crossed;
+- prepare_scores_method, which builds the conservation scores under within-paddock
+  ("within_unit"), criterion-wide ("global_linear") or vector normalization and the
+  community scores under within-paddock or criterion-wide normalization, so the two
+  choices can be crossed;
 - solve_scenario_budget, the optimizer's solve with a choice of normalization,
   reporting total cost including the Paddock 9 commitment and the roadside
   fuelbreak.
 
-With within-unit conservation scores and global linear community scores,
+With within-paddock conservation scores and criterion-wide community scores,
 prepare_scores_method returns exactly the scores of pww_sdm_optimizer.prepare_scores.
 """
 import pathlib
@@ -57,10 +58,10 @@ def prepare_scores_method(input_data, method, roadside_built=False,
     `method` scales the two conservation sub-objectives and `comm_method` the
     three community sub-objectives.
 
-    Within-unit: action effectiveness is rescaled within each paddock, and T&E
+    Within-paddock (within_unit): action effectiveness is rescaled within each paddock, and T&E
     scores are zero where no T&E plants are recorded (as in the main analysis).
-    Global linear and vector: action effectiveness is multiplied by the
-    paddock's T&E count or native cover, then the whole matrix is rescaled.
+    Criterion-wide (global_linear) and vector: action effectiveness is
+    multiplied by the paddock's T&E count or native cover, then the whole matrix is rescaled.
     """
     n_paddocks = input_data["costs"].shape[0]
     opt_indices = [i for i in range(n_paddocks) if i != FIXED_PADDOCK_IDX]

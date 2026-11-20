@@ -31,11 +31,11 @@ The first two scripts take about 12 s together. All four take the model from `sr
 - α = 0: within-paddock action ranges, as in the main analysis. Each paddock's best and worst actions span the same score range regardless of how many T&E individuals or how much native cover it holds.
 - α = 0.5 and α = 1: the within-paddock range multiplied by the paddock's T&E count or native cover, normalized to the maximum and raised to the power α. Scores are rescaled so their aggregate attainable swing matches α = 0.
 
-Community scores use global linear scaling throughout. These are alternative specifications of conservation value, not a correct and an incorrect calculation.
+Community scores use criterion-wide linear scaling throughout. These are alternative specifications of conservation value, not a correct and an incorrect calculation.
 
 ## Indices
 
-`te_index` is the sum over paddocks of the recorded T&E count times the unnormalized action effectiveness of the chosen action (direct benefit plus 6 × fire reduction / maximum reduction). Alternative 11 everywhere with no roadside fuelbreak scores 1,013, the reserve's T&E count; the incremental columns subtract that reference, and `p9_incremental_te_index` subtracts Paddock 9's 580. Global linear scaling is an affine transform of this index, so it maximizes it exactly, and α = 1 maximizes a close variant. Use the index to compare fixed and free Paddock 9 within one α, not to rank the specifications.
+`te_index` is the sum over paddocks of the recorded T&E count times the unnormalized action effectiveness of the chosen action (direct benefit plus 6 × fire reduction / maximum reduction). Alternative 11 everywhere with no roadside fuelbreak scores 1,013, the T&E count recorded in the 22 study paddocks; the incremental columns subtract that reference, and `p9_incremental_te_index` subtracts Paddock 9's 580. Criterion-wide linear scaling of the conservation scores is an affine transform of this index, so it maximizes it exactly, and α = 1 maximizes a close variant. Use the index to compare fixed and free Paddock 9 within one α, not to rank the specifications.
 
 ## Provenance and reproduction check
 

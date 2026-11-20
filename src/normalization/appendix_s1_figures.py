@@ -36,8 +36,8 @@ plt.rcParams.update({
     "axes.linewidth": 0.7, "pdf.fonttype": 42, "savefig.bbox": "tight",
 })
 METHOD = {  # key: (label, color, marker, linestyle)
-    "within_unit": ("Within-unit (main analysis)", "#08306b", "o", "-"),
-    "global_linear": ("Global linear", "#D55E00", "s", "--"),
+    "within_unit": ("Within-paddock (main analysis)", "#08306b", "o", "-"),
+    "global_linear": ("Criterion-wide", "#D55E00", "s", "--"),
     "vector": ("Vector", "#8c8c8c", "^", ":"),
 }
 SCEN = {"Balanced": "Balanced", "Conservation priority": "Conservation Priority",
@@ -101,7 +101,7 @@ for s, lab in SCEN.items():
     row = {"Scenario": lab}
     for m in ["within_unit", "global_linear", "vector"]:
         r = pf[(pf.scenario == s) & (pf.method_eco == m) & (pf.budget == 20e6)].iloc[0]
-        short = {"within_unit": "Within-unit", "global_linear": "Global linear", "vector": "Vector"}[m]
+        short = {"within_unit": "Within-paddock", "global_linear": "Criterion-wide", "vector": "Vector"}[m]
         row[f"{short}: conservation actions"] = int(r.n_conservation_alts)
         row[f"{short}: grazing intensification"] = int(r.n_alt3)
         row[f"{short}: T&E under conservation actions"] = int(r.te_protected)
@@ -131,7 +131,7 @@ save(fig, "Figure_S11_conservation_priority_by_normalization")
 
 # ------------------------------------------------ Table S10: crossed normalization
 sy = pd.read_csv(f"{IN}/normalization_symmetry.csv")
-name = {"within_unit": "Within-unit", "global_linear": "Global linear"}
+name = {"within_unit": "Within-paddock", "global_linear": "Criterion-wide"}
 
 
 def ratio(v):
